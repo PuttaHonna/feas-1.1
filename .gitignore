@@ -1,0 +1,62 @@
+# Python Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+*/.venv/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+**/*.pyc
+**/*.pyo
+
+# Caches & Test artifacts
+.pytest_cache/
+**/.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# Large Weights & ML Checkpoints
+*.pt
+*.pth
+*.onnx
+*.bin
+weights/
+**/weights/
+models/*.pt
+
+# Forensic Evidence, Temporary Files & Generated Outputs
+evidence_store/
+**/evidence_store/
+storage/
+**/storage/
+reports/
+**/reports/
+*.pdf
+results/
+**/results/
+temp/
+**/temp/
+exports/
+**/exports/
+runs/
+*.avi
+*.mp4
+
+# Node & Frontend Build Artifacts
+node_modules/
+**/node_modules/
+dist/
+build/
+.npm/
+.next/
+
+# IDE & OS Specific
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

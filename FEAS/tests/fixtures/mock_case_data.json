@@ -1,0 +1,124 @@
+{
+  "case_id": "8f2a71bc-341e-4c7b-b389-10fa312984ea",
+  "created_at": "2026-08-22T06:15:00.000000Z",
+  "investigator_name": "Special Agent J. Miller",
+  "filename": "surveillance_sector4_cam02.jpg",
+  "file_type": "image",
+  "input_sha256": "4a7d1ed414474e4033ac29ccb8653d9b168aae62c3e1fecd4f1345d3e0c0b891",
+  "output_sha256": "c89b3f4e223910c2830f5a1e78019bca458319f390218de42b8901ab78239014",
+  "status": "COMPLETED",
+  "verdict": "TAMPERED / SUSPECT MATCH IDENTIFIED",
+  "operator_notes": "Immediate evidence intake following sector 4 incident. High priority suspect match.",
+  "metadata": {
+    "has_exif": true,
+    "device_make": "Nikon",
+    "device_model": "D850-Forensic",
+    "software": "FEAS Firmware v1.0",
+    "datetime_original": "2026-08-20 14:32:00",
+    "gps": {
+      "latitude": 37.774928,
+      "longitude": -122.41944
+    }
+  },
+  "forgery": {
+    "tamper_score": 0.88,
+    "is_tampered": true,
+    "bboxes": [
+      {
+        "x1": 250,
+        "y1": 180,
+        "x2": 450,
+        "y2": 320,
+        "label": "splicing",
+        "confidence": 0.92
+      }
+    ],
+    "ela_metrics": {
+      "mean_error": 18.42,
+      "max_error": 142.0,
+      "tamper_ratio": 0.14
+    },
+    "annotated_image_path": "C:\\Users\\user\\FEAS\\tests\\fixtures\\sample.jpg",
+    "ela_image_path": "C:\\Users\\user\\FEAS\\tests\\fixtures\\sample.jpg"
+  },
+  "face": {
+    "restored_shape": [
+      1024,
+      1024,
+      3
+    ],
+    "top_match": {
+      "suspect_id": "SUSP-10492",
+      "name": "Marcus Vance",
+      "similarity": 0.84,
+      "distance": 0.16,
+      "notes": "Prior Grand Larceny, subject spotted near sector 4 CCTV."
+    },
+    "matches": [
+      {
+        "suspect_id": "SUSP-10492",
+        "name": "Marcus Vance",
+        "similarity": 0.84,
+        "distance": 0.16,
+        "notes": "Prior Grand Larceny, subject spotted near sector 4 CCTV."
+      },
+      {
+        "suspect_id": "SUSP-88301",
+        "name": "Elena Rostova",
+        "similarity": 0.32,
+        "distance": 0.68,
+        "notes": "Cyber forgery suspect."
+      }
+    ],
+    "cctv_crop_path": "C:\\Users\\user\\FEAS\\tests\\fixtures\\cctv_crop.jpg",
+    "restored_image_path": "C:\\Users\\user\\FEAS\\tests\\fixtures\\cctv_crop.jpg"
+  },
+  "wound": {
+    "wound_type": "gunshot",
+    "wound_type_confidence": 0.94,
+    "severity": "severe",
+    "severity_confidence": 0.91,
+    "age": "fresh",
+    "age_confidence": 0.87,
+    "location": "torso",
+    "location_confidence": 0.95,
+    "annotated_image_path": "C:\\Users\\user\\FEAS\\tests\\fixtures\\wound_sample.jpg"
+  },
+  "ballistics": {
+    "caliber": "9mm",
+    "caliber_confidence": 0.96,
+    "rifling": "6R",
+    "rifling_confidence": 0.93,
+    "manufacturer": "Glock",
+    "manufacturer_confidence": 0.89,
+    "striation_map_path": "C:\\Users\\user\\FEAS\\tests\\fixtures\\bullet_sample.jpg"
+  },
+  "audit_trail": [
+    {
+      "timestamp": "2026-08-22T06:15:00.102340Z",
+      "action": "CASE_CREATED",
+      "input_sha256": "4a7d1ed414474e4033ac29ccb8653d9b168aae62c3e1fecd4f1345d3e0c0b891",
+      "details": "Intake validation passed."
+    },
+    {
+      "timestamp": "2026-08-22T06:15:01.450120Z",
+      "action": "EXIF_METADATA_EXTRACTED",
+      "details": "GPS coordinates verified (37.774928, -122.41944)."
+    },
+    {
+      "timestamp": "2026-08-22T06:15:03.882100Z",
+      "action": "FORGERY_INFERENCE_COMPLETED",
+      "details": "Tampering detected at (250, 180, 450, 320), confidence 0.92."
+    },
+    {
+      "timestamp": "2026-08-22T06:15:05.120400Z",
+      "action": "FACE_RECOGNITION_COMPLETED",
+      "details": "Suspect match SUSP-10492 (Marcus Vance), similarity 0.84."
+    },
+    {
+      "timestamp": "2026-08-22T06:15:06.901230Z",
+      "action": "WOUND_BALLISTICS_COMPLETED",
+      "details": "Wound classified gunshot/severe, 9mm 6R Glock signature."
+    }
+  ]
+}
