@@ -1,19 +1,19 @@
 """
 CCTV Annotated Video Generator.
-Overlays bounding boxes, stable track identifiers, timestamps,
+Overlays bounding boxes, stable track identifiers, vehicle forensic attributes,
+crash warnings, suspicious behavior alerts, timestamps,
 and prominent derived-evidence advisory watermarks.
 """
 
 from __future__ import annotations
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Any
 import cv2
 import numpy as np
 
 from src.cctv.detector import Detection
 
 DERIVED_WATERMARK: str = "DERIVED ANALYSIS COPY — HUMAN REVIEW REQUIRED"
-
 
 # Distinct color palette per class for visual clarity
 CLASS_COLORS = {
@@ -29,16 +29,26 @@ CLASS_COLORS = {
     "cell phone": (255, 255, 100) # Yellow
 }
 
+COLOR_CRASH = (0, 0, 255)        # Pure Red for Crash / Collision
+COLOR_SUSPICIOUS = (0, 140, 255)  # Orange for Suspicious / Kinematic Anomaly
+
 
 def draw_detection_overlay(
     frame_bgr: np.ndarray,
     detections: List[Detection],
     timestamp_hms: str,
-    roi_polygon: Optional[List[Tuple[float, float]]] = None
+    roi_polygon: Optional[List[Tuple[float, float]]] = None,
+    vehicle_profiles: Optional[Dict[str, Any]] = None,
+    crashed_track_ids: Optional[Set[str]] = None,
+    suspicious_track_ids: Optional[Dict[str, List[str]]] = None
 ) -> np.ndarray:
-    """Draw bounding boxes, track labels, and the derived disclaimer watermark on a frame."""
+    """Draw bounding boxes, track labels, vehicle metadata, and advisory watermarks on a frame."""
     canvas = frame_bgr.copy()
     h, w = canvas.shape[:2]
+
+    crashed_set = crashed_track_ids or set()
+    suspicious_map = suspicious_track_ids or {}
+    profiles = vehicle_profiles or {}
 
     # 1. Draw ROI polygon if specified
     if roi_polygon and len(roi_polygon) >= 3:
@@ -52,27 +62,48 @@ def draw_detection_overlay(
     # 2. Draw detections & tracks
     for det in detections:
         tid = det.track_id or "unassigned"
-        color = CLASS_COLORS.get(det.class_name, (0, 240, 255))
+        base_color = CLASS_COLORS.get(det.class_name, (0, 240, 255))
+
+        is_crashed = tid in crashed_set
+        susp_flags = suspicious_map.get(tid, [])
+        is_suspicious = len(susp_flags) > 0
+
+        # Prioritize alert color
+        if is_crashed:
+            box_color = COLOR_CRASH
+            thickness = 3
+        elif is_suspicious:
+            box_color = COLOR_SUSPICIOUS
+            thickness = 2
+        else:
+            box_color = base_color
+            thickness = 2
 
         x1, y1 = int(det.x1), int(det.y1)
         x2, y2 = int(det.x2), int(det.y2)
 
         # Bounding box
-        cv2.rectangle(canvas, (x1, y1), (x2, y2), color, 2)
+        cv2.rectangle(canvas, (x1, y1), (x2, y2), box_color, thickness)
 
-        # Label tag
-        label = f"{tid} | {det.confidence:.2f}"
-        (tw, th), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+        # Primary label tag
+        if is_crashed:
+            primary_label = f"💥 CRASH | {tid}"
+        elif is_suspicious:
+            primary_label = f"⚠️ {susp_flags[0]} | {tid}"
+        else:
+            primary_label = f"{tid} | {det.confidence:.2f}"
+
+        (tw, th), baseline = cv2.getTextSize(primary_label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
 
         # Background badge for text
         badge_y1 = max(0, y1 - th - 6)
         badge_y2 = y1
         cv2.rectangle(canvas, (x1, badge_y1), (x1 + tw + 6, badge_y2), (16, 24, 38), -1)
-        cv2.rectangle(canvas, (x1, badge_y1), (x1 + tw + 6, badge_y2), color, 1)
+        cv2.rectangle(canvas, (x1, badge_y1), (x1 + tw + 6, badge_y2), box_color, 1)
 
         cv2.putText(
             canvas,
-            label,
+            primary_label,
             (x1 + 3, y1 - 4),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,
@@ -80,6 +111,33 @@ def draw_detection_overlay(
             1,
             cv2.LINE_AA
         )
+
+        # Vehicle Attribute subtitle under the bounding box if available
+        v_prof = profiles.get(tid)
+        if v_prof is not None:
+            # Build vehicle attribute tag
+            color_str = getattr(v_prof, "dominant_color", None) or v_prof.get("dominant_color", "")
+            body_str = getattr(v_prof, "estimated_body_type", None) or v_prof.get("estimated_body_type", "")
+            plate_str = getattr(v_prof, "license_plate_number", None) or v_prof.get("license_plate_number", "")
+
+            plate_display = plate_str if plate_str else "No Plate Rec."
+            attr_text = f"Plate: {plate_display} | {color_str} {body_str}"
+
+            (aw, ah), _ = cv2.getTextSize(attr_text, cv2.FONT_HERSHEY_SIMPLEX, 0.42, 1)
+            b_bot_y1 = y2
+            b_bot_y2 = min(h, y2 + ah + 6)
+            cv2.rectangle(canvas, (x1, b_bot_y1), (x1 + aw + 6, b_bot_y2), (16, 24, 38), -1)
+            cv2.rectangle(canvas, (x1, b_bot_y1), (x1 + aw + 6, b_bot_y2), box_color, 1)
+            cv2.putText(
+                canvas,
+                attr_text,
+                (x1 + 3, b_bot_y2 - 3),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.42,
+                (230, 240, 255),
+                1,
+                cv2.LINE_AA
+            )
 
     # 3. Top-left mandatory banner: "DERIVED ANALYSIS COPY — HUMAN REVIEW REQUIRED"
     banner_h = 32

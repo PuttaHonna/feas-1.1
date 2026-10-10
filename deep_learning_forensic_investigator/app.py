@@ -348,12 +348,13 @@ elif page == "CCTV Video Analysis":
         st.markdown("### Analysis Results & Evidence Summary")
         st.info(cctv_res.get("derived_label", "Derived output for human review"))
 
-        m1, m2, m3, m4, m5 = st.columns(5)
+        m1, m2, m3, m4, m5, m6 = st.columns(6)
         m1.metric("Frames Analyzed", cctv_res.get("total_frames_processed", 0))
         m2.metric("Total Detections", cctv_res.get("total_detections", 0))
         m3.metric("Unique Tracks", cctv_res.get("total_tracks", 0))
-        m4.metric("Events Extracted", cctv_res.get("total_events", 0))
-        m5.metric("FPS", cctv_res.get("metadata", {}).get("fps", 0))
+        m4.metric("Vehicles Profiled", cctv_res.get("total_vehicles", 0))
+        m5.metric("💥 Crashes / Impacts", cctv_res.get("total_collisions", 0))
+        m6.metric("⚠️ Suspicious Alerts", cctv_res.get("total_suspicious_alerts", 0))
 
         st.markdown("#### Cryptographic Chain of Custody")
         st.markdown(f"- **Original File Hash (SHA-256):** `{cctv_res.get('original_sha256')}`")
@@ -361,48 +362,125 @@ elif page == "CCTV Video Analysis":
         if cctv_res.get('original_sha256') == cctv_res.get('working_copy_sha256'):
             st.markdown('<div class="good">✓ Working copy verified byte-for-byte identical to original evidence.</div>', unsafe_allow_html=True)
 
-        st.markdown("#### Exported Derived Artifacts")
-        d_col1, d_col2, d_col3, d_col4 = st.columns(4)
+        st.markdown("#### Exported Forensic Artifacts")
+        d_col1, d_col2, d_col3, d_col4, d_col5 = st.columns(5)
 
         vid_path = Path(cctv_res.get("annotated_video_path", ""))
         if vid_path.is_file():
             with open(vid_path, "rb") as f:
                 d_col1.download_button(
-                    "Download Annotated Video",
+                    "Download Video",
                     data=f.read(),
                     file_name=vid_path.name,
                     mime="video/mp4"
                 )
 
-        det_csv = Path(cctv_res.get("detections_csv_path", ""))
-        if det_csv.is_file():
-            with open(det_csv, "rb") as f:
+        veh_csv = Path(cctv_res.get("vehicles_csv_path", ""))
+        if veh_csv.is_file():
+            with open(veh_csv, "rb") as f:
                 d_col2.download_button(
-                    "Download Detections CSV",
+                    "Download Vehicles CSV",
                     data=f.read(),
-                    file_name=det_csv.name,
+                    file_name=veh_csv.name,
                     mime="text/csv"
                 )
 
-        trk_csv = Path(cctv_res.get("tracks_csv_path", ""))
-        if trk_csv.is_file():
-            with open(trk_csv, "rb") as f:
+        col_csv = Path(cctv_res.get("collisions_csv_path", ""))
+        if col_csv.is_file():
+            with open(col_csv, "rb") as f:
                 d_col3.download_button(
-                    "Download Tracks CSV",
+                    "Download Collisions CSV",
                     data=f.read(),
-                    file_name=trk_csv.name,
+                    file_name=col_csv.name,
                     mime="text/csv"
                 )
 
-        evt_json = Path(cctv_res.get("events_json_path", ""))
-        if evt_json.is_file():
-            with open(evt_json, "rb") as f:
+        susp_csv = Path(cctv_res.get("suspicious_csv_path", ""))
+        if susp_csv.is_file():
+            with open(susp_csv, "rb") as f:
                 d_col4.download_button(
-                    "Download Events JSON",
+                    "Download Suspicious CSV",
                     data=f.read(),
-                    file_name=evt_json.name,
-                    mime="application/json"
+                    file_name=susp_csv.name,
+                    mime="text/csv"
                 )
+
+        rep_md = Path(cctv_res.get("report_md_path", ""))
+        if rep_md.is_file():
+            with open(rep_md, "rb") as f:
+                d_col5.download_button(
+                    "Download Report (MD)",
+                    data=f.read(),
+                    file_name=rep_md.name,
+                    mime="text/markdown"
+                )
+
+        # 1. Collision Incidents Card
+        collisions = cctv_res.get("collisions", [])
+        if collisions:
+            st.markdown("#### 💥 Vehicle Crash & Collision Incidents Detected")
+            for col in collisions:
+                st.error(
+                    f"**Incident {col.get('incident_id')} at {col.get('timestamp_hms')}** | "
+                    f"Vehicles Involved: `{col.get('primary_track_id')}` & `{col.get('secondary_track_id') or 'Obstacle'}` | "
+                    f"Severity: **{col.get('severity_advisory')}** (Delta-V: {col.get('impact_speed_delta_px_s')} px/s)\n\n"
+                    f"*{col.get('description')}*"
+                )
+        else:
+            st.success("✓ No crash or collision dynamics detected in footage.")
+
+        # 2. Suspicious Activities Card
+        susp_alerts = cctv_res.get("suspicious_activities", [])
+        if susp_alerts:
+            st.markdown("#### ⚠️ Suspicious Vehicle Behaviors & Kinematic Anomalies")
+            s_rows = []
+            for s in susp_alerts:
+                s_rows.append({
+                    "Alert ID": s.get("alert_id"),
+                    "Track ID": s.get("track_id"),
+                    "Anomaly Type": s.get("activity_type"),
+                    "Timestamp": s.get("timestamp_hms"),
+                    "Severity": s.get("severity_level"),
+                    "Speed (px/s)": s.get("speed_px_s"),
+                    "Heading": f"{s.get('heading_degrees')}°" if s.get('heading_degrees') is not None else "N/A",
+                    "Details": s.get("description")
+                })
+            st.dataframe(pd.DataFrame(s_rows), use_container_width=True)
+
+        # 3. Vehicle Forensic Registry
+        vehicles = cctv_res.get("vehicles", [])
+        if vehicles:
+            st.markdown("#### 🚗 Vehicle Forensic Registry (ANPR, Make/Model, Paint Color)")
+            v_rows = []
+            for v in vehicles:
+                plate = v.get("license_plate_number") or "Not Resolved"
+                conf = v.get("license_plate_confidence", 0.0)
+                v_rows.append({
+                    "Track ID": v.get("track_id"),
+                    "Class": v.get("vehicle_type"),
+                    "Est. Body Type": v.get("estimated_body_type"),
+                    "Model Profile (Advisory)": v.get("estimated_model_profile"),
+                    "Color": v.get("dominant_color"),
+                    "License Plate (OCR)": f"{plate} ({int(conf*100)}%)" if plate != "Not Resolved" else "N/A",
+                    "Crashed?": "💥 YES" if v.get("crash_involved") else "No",
+                    "Suspicious Flags": ", ".join(v.get("suspicious_activities", [])) or "None",
+                    "Speed": f"{v.get('speed_estimate_px_s', 0.0)} px/s"
+                })
+            st.dataframe(pd.DataFrame(v_rows), use_container_width=True)
+
+            # Keyframe crops for vehicles with plate crops
+            st.markdown("##### Vehicle Visual Inspection & License Plate Crops")
+            plate_crops_found = [v for v in vehicles if v.get("license_plate_crop_path") or v.get("vehicle_crop_path")]
+            if plate_crops_found:
+                v_cols = st.columns(min(4, len(plate_crops_found)))
+                for idx, v in enumerate(plate_crops_found[:8]):
+                    with v_cols[idx % len(v_cols)]:
+                        v_img = v.get("vehicle_crop_path")
+                        p_img = v.get("license_plate_crop_path")
+                        if v_img and Path(v_img).is_file():
+                            st.image(str(v_img), caption=f"Vehicle: {v.get('track_id')}", use_container_width=True)
+                        if p_img and Path(p_img).is_file():
+                            st.image(str(p_img), caption=f"Plate Crop ({v.get('license_plate_number') or 'Unresolved'})", use_container_width=True)
 
         if vid_path.is_file():
             st.markdown("#### Annotated Video Preview (Derived Copy)")
@@ -410,7 +488,7 @@ elif page == "CCTV Video Analysis":
 
         events_list = cctv_res.get("events", [])
         if events_list:
-            st.markdown("#### Objective Event Timeline")
+            st.markdown("#### Objective Spatio-Temporal Event Timeline")
             evt_df = pd.DataFrame(events_list)[["event_id", "timestamp_hms", "event_type", "track_id", "description", "confidence_summary"]]
             st.dataframe(evt_df, use_container_width=True)
 

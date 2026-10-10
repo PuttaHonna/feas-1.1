@@ -818,12 +818,13 @@ def main():
             st.markdown("### 📊 CCTV Forensic Dossier & Derived Artifacts")
             st.info(c_res.get("derived_label", "Derived output for human review"))
 
-            cm1, cm2, cm3, cm4, cm5 = st.columns(5)
+            cm1, cm2, cm3, cm4, cm5, cm6 = st.columns(6)
             cm1.metric("Frames Analyzed", c_res.get("total_frames_processed", 0))
             cm2.metric("Total Detections", c_res.get("total_detections", 0))
             cm3.metric("Tracked Objects", c_res.get("total_tracks", 0))
-            cm4.metric("Events Extracted", c_res.get("total_events", 0))
-            cm5.metric("Video FPS", c_res.get("metadata", {}).get("fps", 0))
+            cm4.metric("Vehicles Profiled", c_res.get("total_vehicles", 0))
+            cm5.metric("💥 Crashes Detected", c_res.get("total_collisions", 0))
+            cm6.metric("⚠️ Suspicious Alerts", c_res.get("total_suspicious_alerts", 0))
 
             # Cryptographic Integrity
             st.markdown("#### 🔒 Cryptographic Chain of Custody")
@@ -833,24 +834,95 @@ def main():
                 st.markdown('<div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 10px; color: #10b981; font-size: 13px;">✓ Working copy verified byte-for-byte identical to original evidence.</div>', unsafe_allow_html=True)
 
             # Download Artifacts
-            st.markdown("#### 📥 Exported Artifacts")
-            dc1, dc2, dc3, dc4 = st.columns(4)
+            st.markdown("#### 📥 Exported Forensic Artifacts")
+            dc1, dc2, dc3, dc4, dc5 = st.columns(5)
             v_p = Path(c_res.get("annotated_video_path", ""))
             if v_p.is_file():
                 with open(v_p, "rb") as f:
-                    dc1.download_button("Download Annotated Video", data=f.read(), file_name=v_p.name, mime="video/mp4", key="dl_feas_vid")
-            d_p = Path(c_res.get("detections_csv_path", ""))
-            if d_p.is_file():
-                with open(d_p, "rb") as f:
-                    dc2.download_button("Download Detections CSV", data=f.read(), file_name=d_p.name, mime="text/csv", key="dl_feas_det")
-            t_p = Path(c_res.get("tracks_csv_path", ""))
-            if t_p.is_file():
-                with open(t_p, "rb") as f:
-                    dc3.download_button("Download Tracks CSV", data=f.read(), file_name=t_p.name, mime="text/csv", key="dl_feas_trk")
-            e_p = Path(c_res.get("events_json_path", ""))
-            if e_p.is_file():
-                with open(e_p, "rb") as f:
-                    dc4.download_button("Download Events JSON", data=f.read(), file_name=e_p.name, mime="application/json", key="dl_feas_evt")
+                    dc1.download_button("Download Video", data=f.read(), file_name=v_p.name, mime="video/mp4", key="dl_feas_vid")
+            veh_p = Path(c_res.get("vehicles_csv_path", ""))
+            if veh_p.is_file():
+                with open(veh_p, "rb") as f:
+                    dc2.download_button("Vehicles CSV", data=f.read(), file_name=veh_p.name, mime="text/csv", key="dl_feas_veh")
+            col_p = Path(c_res.get("collisions_csv_path", ""))
+            if col_p.is_file():
+                with open(col_p, "rb") as f:
+                    dc3.download_button("Collisions CSV", data=f.read(), file_name=col_p.name, mime="text/csv", key="dl_feas_col")
+            susp_p = Path(c_res.get("suspicious_csv_path", ""))
+            if susp_p.is_file():
+                with open(susp_p, "rb") as f:
+                    dc4.download_button("Suspicious CSV", data=f.read(), file_name=susp_p.name, mime="text/csv", key="dl_feas_susp")
+            rep_p = Path(c_res.get("report_md_path", ""))
+            if rep_p.is_file():
+                with open(rep_p, "rb") as f:
+                    dc5.download_button("Report (MD)", data=f.read(), file_name=rep_p.name, mime="text/markdown", key="dl_feas_rep")
+
+            # 1. Collision Alerts
+            feas_collisions = c_res.get("collisions", [])
+            if feas_collisions:
+                st.markdown("#### 💥 Vehicle Crash & Collision Dynamics Detected")
+                for fc in feas_collisions:
+                    st.error(
+                        f"**Collision Incident {fc.get('incident_id')} at {fc.get('timestamp_hms')}** | "
+                        f"Vehicles: `{fc.get('primary_track_id')}` & `{fc.get('secondary_track_id') or 'Barrier'}` | "
+                        f"Severity: **{fc.get('severity_advisory')}** (Impact Delta-V: {fc.get('impact_speed_delta_px_s')} px/s)\n\n"
+                        f"*{fc.get('description')}*"
+                    )
+            else:
+                st.success("✓ No collision dynamics or sudden deceleration impacts detected.")
+
+            # 2. Suspicious Activities
+            feas_susp = c_res.get("suspicious_activities", [])
+            if feas_susp:
+                st.markdown("#### ⚠️ Suspicious Vehicle Behaviors & Kinematic Anomalies")
+                s_data = []
+                for s in feas_susp:
+                    s_data.append({
+                        "Alert ID": s.get("alert_id"),
+                        "Track ID": s.get("track_id"),
+                        "Anomaly Type": s.get("activity_type"),
+                        "Timestamp": s.get("timestamp_hms"),
+                        "Severity": s.get("severity_level"),
+                        "Speed (px/s)": s.get("speed_px_s"),
+                        "Heading": f"{s.get('heading_degrees')}°" if s.get('heading_degrees') is not None else "N/A",
+                        "Description": s.get("description")
+                    })
+                st.dataframe(pd.DataFrame(s_data), use_container_width=True)
+
+            # 3. Vehicle Registry
+            feas_vehs = c_res.get("vehicles", [])
+            if feas_vehs:
+                st.markdown("#### 🚗 Vehicle Forensic Registry (ANPR, Make/Model, Paint Color)")
+                v_data = []
+                for v in feas_vehs:
+                    plt_str = v.get("license_plate_number") or "Not Resolved"
+                    p_conf = v.get("license_plate_confidence", 0.0)
+                    v_data.append({
+                        "Track ID": v.get("track_id"),
+                        "Type": v.get("vehicle_type"),
+                        "Body Classification": v.get("estimated_body_type"),
+                        "Advisory Model Profile": v.get("estimated_model_profile"),
+                        "Paint Color": v.get("dominant_color"),
+                        "License Plate": f"{plt_str} ({int(p_conf*100)}%)" if plt_str != "Not Resolved" else "N/A",
+                        "Collision?": "💥 YES" if v.get("crash_involved") else "No",
+                        "Suspicious Flags": ", ".join(v.get("suspicious_activities", [])) or "None",
+                        "Speed (px/s)": v.get("speed_estimate_px_s", 0.0)
+                    })
+                st.dataframe(pd.DataFrame(v_data), use_container_width=True)
+
+                # Vehicle crops gallery
+                st.markdown("##### 🔍 Vehicle Keyframe Crops & License Plate Extracts")
+                crops_list = [v for v in feas_vehs if v.get("license_plate_crop_path") or v.get("vehicle_crop_path")]
+                if crops_list:
+                    cp_cols = st.columns(min(4, len(crops_list)))
+                    for idx, v in enumerate(crops_list[:8]):
+                        with cp_cols[idx % len(cp_cols)]:
+                            v_crop = v.get("vehicle_crop_path")
+                            p_crop = v.get("license_plate_crop_path")
+                            if v_crop and Path(v_crop).is_file():
+                                st.image(str(v_crop), caption=f"Vehicle: {v.get('track_id')}", use_container_width=True)
+                            if p_crop and Path(p_crop).is_file():
+                                st.image(str(p_crop), caption=f"Plate: {v.get('license_plate_number') or 'Unresolved'}", use_container_width=True)
 
             if v_p.is_file():
                 st.markdown("#### 🎬 Derived Annotated Video Preview")
@@ -858,7 +930,7 @@ def main():
 
             ev_list = c_res.get("events", [])
             if ev_list:
-                st.markdown("#### 📋 Objective Event Timeline")
+                st.markdown("#### 📋 Objective Spatio-Temporal Event Timeline")
                 edf = pd.DataFrame(ev_list)[["event_id", "timestamp_hms", "event_type", "track_id", "description", "confidence_summary"]]
                 st.dataframe(edf, use_container_width=True)
 

@@ -3,8 +3,10 @@ CCTV Analysis Pipeline Orchestrator.
 Coordinates the end-to-end execution flow:
 Validation -> Immutable Intake -> Cryptographic Hashing -> Working Copy
 -> Frame Extraction -> Deterministic Enhancement -> YOLO Detection
--> Multi-Object Tracking -> Event Extraction -> Video Annotation
--> Keyframe Curation -> CSV/JSON Export -> Audit Logging.
+-> Multi-Object Tracking -> Vehicle Forensic Profiling (ANPR / Color / Model)
+-> Collision & Crash Detection -> Suspicious Behavior Analysis
+-> Event Extraction -> Video Annotation -> Keyframe Curation
+-> Multi-CSV/JSON/Markdown Export -> Audit Logging.
 """
 
 from __future__ import annotations
@@ -12,7 +14,7 @@ from datetime import datetime, timezone
 import logging
 from pathlib import Path
 import shutil
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 import cv2
 import numpy as np
 
@@ -24,13 +26,18 @@ from src.cctv.frame_extractor import extract_cctv_frames
 from src.cctv.enhancement import enhance_frame, EnhancementMode, DERIVED_FRAME_LABEL
 from src.cctv.detector import CCTVDetector
 from src.cctv.tracker import CCTVTracker
-from src.cctv.event_extractor import CCTVEventExtractor
+from src.cctv.event_extractor import CCTVEventExtractor, CCTVEvent
 from src.cctv.annotated_video import draw_detection_overlay, generate_annotated_video
+from src.cctv.vehicle_analyzer import VehicleForensicAnalyzer, VehicleProfile
+from src.cctv.collision_detector import CollisionDetector, CollisionIncident
+from src.cctv.suspicious_detector import SuspiciousActivityDetector, SuspiciousActivityAlert
 from src.cctv.audit_logger import CCTVAuditLogger
 from src.cctv.export_results import export_cctv_artifacts
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("CCTVPipeline")
+
+VEHICLE_CLASSES: Set[str] = {"car", "truck", "bus", "motorcycle"}
 
 
 def run_cctv_analysis(
@@ -118,90 +125,76 @@ def run_cctv_analysis(
 
     # 1. Step 1 & 2: Validate video container and size
     update_progress(0.05, "Validating video format and stream integrity...")
-    val_result = validate_cctv_video(input_video_path)
-    if not val_result.is_valid:
-        raise ValueError(f"Video validation failed: {val_result.error_message}")
+    is_valid, val_reason = validate_cctv_video(input_video_path)
+    if not is_valid:
+        raise ValueError(f"Video validation failed: {val_reason}")
 
-    # 2. Step 3 & 4: Preserve Original Evidence & Calculate Hash
-    update_progress(0.10, "Preserving original evidence and calculating SHA-256 hash...")
-    input_p = Path(input_video_path)
-    target_original = originals_dir / f"{evidence_id}_{input_p.name}"
+    # 2. Step 3 & 4: Secure original evidence and compute SHA-256
+    update_progress(0.08, "Securing immutable original evidence & calculating SHA-256...")
+    in_path = Path(input_video_path)
+    original_target_path = originals_dir / f"{evidence_id}_ORIGINAL{in_path.suffix.lower()}"
 
-    # Only copy to originals if it is not already located there
-    if input_p.resolve() != target_original.resolve():
-        shutil.copy2(input_p, target_original)
-        orig_evidence_path = target_original
-    else:
-        orig_evidence_path = input_p
+    if not original_target_path.exists() or original_target_path.resolve() != in_path.resolve():
+        shutil.copy2(in_path, original_target_path)
+        # Mark read-only
+        original_target_path.chmod(0o444)
 
-    original_sha256 = calculate_file_sha256(orig_evidence_path)
-    original_size = orig_evidence_path.stat().st_size
+    original_sha256 = calculate_file_sha256(original_target_path)
 
-    # 3. Step 5: Store original file in SQLite audit log
-    audit_logger.record_evidence_intake(
-        evidence_id=evidence_id,
-        case_id=case_id,
-        original_filename=orig_evidence_path.name,
-        original_path=str(orig_evidence_path),
-        original_sha256=original_sha256,
-        original_size_bytes=original_size
+    # 3. Step 5: Extract technical metadata
+    update_progress(0.12, "Extracting technical container metadata...")
+    metadata = extract_technical_metadata(original_target_path)
+    metadata["case_id"] = case_id
+    metadata["evidence_id"] = evidence_id
+    metadata["camera_id"] = camera_id
+    metadata["camera_location"] = camera_location
+    metadata["event_datetime"] = event_datetime
+    metadata["timezone"] = timezone_str
+    metadata["analysis_mode"] = analysis_mode
+    metadata["enhancement_mode"] = enhancement_mode
+    metadata["yolo_model"] = yolo_model_name
+    metadata["confidence_threshold"] = confidence_threshold
+    metadata["tracking_method"] = tracking_method
+    metadata["original_sha256"] = original_sha256
+    metadata["processing_start_time"] = datetime.now(timezone.utc).isoformat()
+
+    # 4. Step 6, 7 & 8: Create verified working copy
+    update_progress(0.18, "Generating verified working copy...")
+    working_copy_path, working_copy_sha256 = create_verified_working_copy(
+        original_path=original_target_path,
+        working_copies_dir=working_copies_dir,
+        evidence_id=evidence_id
     )
+    metadata["working_copy_path"] = str(working_copy_path)
+    metadata["working_copy_sha256"] = working_copy_sha256
 
-    audit_logger.record_run_start(
+    # 5. Initialize audit log entry
+    update_progress(0.22, "Initializing audit log and integrity records...")
+    audit_logger.record_analysis_run(
         run_id=run_id,
+        case_id=case_id,
         evidence_id=evidence_id,
-        enhancement_mode=enhancement_mode,
-        frame_sampling=f"{analysis_mode}:{frame_sampling_step}",
-        yolo_model=yolo_model_name,
-        confidence_threshold=confidence_threshold,
-        tracking_method=tracking_method
+        camera_id=camera_id,
+        original_sha256=original_sha256,
+        working_copy_sha256=working_copy_sha256,
+        parameters=metadata
     )
 
     try:
-        # 4. Step 6 & 7: Extract Technical Metadata
-        update_progress(0.15, "Extracting video container metadata...")
-        user_meta = {
-            "camera_id": camera_id,
-            "camera_location": camera_location,
-            "event_datetime": event_datetime,
-            "timezone": timezone_str,
-            "yolo_model": yolo_model_name,
-            "confidence_threshold": confidence_threshold,
-            "tracking_method": tracking_method,
-            "enhancement_settings": enhancement_mode,
-            "processing_start_time": datetime.now(timezone.utc).isoformat()
-        }
-        metadata = extract_technical_metadata(
-            video_path=orig_evidence_path,
-            evidence_id=evidence_id,
-            case_id=case_id,
-            user_metadata=user_meta,
-            precomputed_sha256=original_sha256
-        )
-
-        # 5. Step 8: Create verified derived working copy
-        update_progress(0.20, "Creating cryptographically verified working copy...")
-        working_copy_path, working_copy_sha256 = create_verified_working_copy(
-            original_path=orig_evidence_path,
-            working_copies_dir=working_copies_dir,
-            unique_prefix=evidence_id
-        )
-        metadata["working_copy_sha256"] = working_copy_sha256
-
-        # Update evidence table with working copy hash
-        audit_logger.record_evidence_intake(
-            evidence_id=evidence_id,
-            case_id=case_id,
-            original_filename=orig_evidence_path.name,
-            original_path=str(orig_evidence_path),
+        # Audit log step: INGESTION
+        audit_logger.record_step(
+            step_id=f"STEP-INGEST-{evidence_id}",
+            run_id=run_id,
+            step_name="INGEST_AND_HASH",
+            input_ref=str(original_target_path),
+            output_ref=str(working_copy_path),
+            parameters={"hash_algorithm": "SHA-256"},
             original_sha256=original_sha256,
-            original_size_bytes=original_size,
-            working_copy_path=str(working_copy_path),
             working_copy_sha256=working_copy_sha256
         )
 
         # 6. Initialize Analytic Engines
-        update_progress(0.25, f"Loading YOLOv8 model ({yolo_model_name})...")
+        update_progress(0.25, f"Loading YOLOv8 model ({yolo_model_name}) & Forensic Profilers...")
         detector = CCTVDetector(
             model_name=yolo_model_name,
             confidence_threshold=confidence_threshold
@@ -212,6 +205,10 @@ def run_cctv_analysis(
             roi_polygon=roi_polygon,
             roi_dwell_threshold_seconds=5.0
         )
+        vehicle_analyzer = VehicleForensicAnalyzer(output_dir=results_base)
+        collision_detector = CollisionDetector()
+        suspicious_detector = SuspiciousActivityDetector()
+        vehicle_profiles: Dict[str, VehicleProfile] = {}
 
         # 7. Extract, Enhance, Detect, Track, and Annotate Frames
         update_progress(0.30, "Streaming and analyzing video frames...")
@@ -266,7 +263,9 @@ def run_cctv_analysis(
                 cv2.imwrite(str(ov_path), raw_bgr)
                 overview_keyframes.append(str(ov_path))
 
-            # Manage track entry, best-detection, and exit keyframes
+            active_vehicle_boxes: Dict[str, Tuple[float, float, Tuple[float, float, float, float]]] = {}
+
+            # Manage track entry, best-detection, and vehicle attributes
             for det in tracked_detections:
                 tid = det.track_id
                 if not tid:
@@ -287,6 +286,91 @@ def run_cctv_analysis(
                     track_best_conf[tid] = det.confidence
                     track_best_img[tid] = enhanced_bgr.copy()
 
+                # Process Vehicle-specific Analytics (ANPR, Color, Model)
+                if det.class_name in VEHICLE_CLASSES:
+                    collision_detector.record_track_state(
+                        track_id=tid,
+                        class_name=det.class_name,
+                        frame_number=f_idx,
+                        timestamp_seconds=t_sec,
+                        cx=det.centroid_x,
+                        cy=det.centroid_y,
+                        bbox=(det.x1, det.y1, det.x2, det.y2)
+                    )
+                    suspicious_detector.record_movement(
+                        track_id=tid,
+                        class_name=det.class_name,
+                        frame_number=f_idx,
+                        timestamp_seconds=t_sec,
+                        timestamp_hms=t_hms,
+                        cx=det.centroid_x,
+                        cy=det.centroid_y
+                    )
+                    active_vehicle_boxes[tid] = (det.centroid_x, det.centroid_y, (det.x1, det.y1, det.x2, det.y2))
+
+                    # Perform vehicle profiling if unanalyzed or plate not yet resolved
+                    need_analysis = (
+                        tid not in vehicle_profiles or
+                        (vehicle_profiles[tid].license_plate_number is None and det.confidence > 0.55)
+                    )
+                    if need_analysis:
+                        v_prof = vehicle_analyzer.analyze_vehicle(
+                            track_id=tid,
+                            class_name=det.class_name,
+                            frame_bgr=enhanced_bgr,
+                            bbox=(det.x1, det.y1, det.x2, det.y2),
+                            frame_number=f_idx,
+                            timestamp_seconds=t_sec
+                        )
+                        if tid in vehicle_profiles:
+                            v_prof.first_seen_seconds = vehicle_profiles[tid].first_seen_seconds
+                            v_prof.total_detections = vehicle_profiles[tid].total_detections + 1
+                        vehicle_profiles[tid] = v_prof
+                    else:
+                        vehicle_profiles[tid].last_seen_seconds = t_sec
+                        vehicle_profiles[tid].total_detections += 1
+
+            # Check frame-level collision incidents
+            new_collisions = collision_detector.evaluate_frame(
+                active_vehicle_tracks=active_vehicle_boxes,
+                frame_number=f_idx,
+                timestamp_seconds=t_sec,
+                timestamp_hms=t_hms
+            )
+            for col in new_collisions:
+                event_extractor.events.append(CCTVEvent(
+                    event_id=col.incident_id,
+                    event_type="VEHICLE_CRASH_COLLISION",
+                    description=col.description,
+                    track_id=col.primary_track_id,
+                    timestamp_seconds=t_sec,
+                    timestamp_hms=t_hms,
+                    frame_number=f_idx,
+                    confidence_summary=0.90,
+                    camera_id=camera_id,
+                    related_keyframe_path=tracked_detections[0].keyframe_path if tracked_detections else None
+                ))
+
+            # Check traffic flow headings for wrong-way driving
+            new_susp_alerts = suspicious_detector.evaluate_flow_directions(
+                frame_number=f_idx,
+                timestamp_seconds=t_sec,
+                timestamp_hms=t_hms
+            )
+            for alert in new_susp_alerts:
+                event_extractor.events.append(CCTVEvent(
+                    event_id=alert.alert_id,
+                    event_type="SUSPICIOUS_VEHICLE_ACTIVITY",
+                    description=alert.description,
+                    track_id=alert.track_id,
+                    timestamp_seconds=t_sec,
+                    timestamp_hms=t_hms,
+                    frame_number=f_idx,
+                    confidence_summary=0.85,
+                    camera_id=camera_id,
+                    related_keyframe_path=tracked_detections[0].keyframe_path if tracked_detections else None
+                ))
+
             # Step 13: Extract objective spatio-temporal events
             current_kf = det.keyframe_path if tracked_detections else None
             event_extractor.process_frame_detections(
@@ -298,12 +382,15 @@ def run_cctv_analysis(
                 keyframe_path=current_kf
             )
 
-            # Step 14: Render derived visualization overlay
+            # Step 14: Render derived visualization overlay with vehicle attributes & alerts
             annotated_frame = draw_detection_overlay(
                 frame_bgr=enhanced_bgr,
                 detections=tracked_detections,
                 timestamp_hms=t_hms,
-                roi_polygon=roi_polygon
+                roi_polygon=roi_polygon,
+                vehicle_profiles=vehicle_profiles,
+                crashed_track_ids=collision_detector.get_crashed_track_ids(),
+                suspicious_track_ids=suspicious_detector.flagged_activities
             )
             annotated_frames.append(annotated_frame)
             all_detections.extend(tracked_detections)
@@ -311,7 +398,7 @@ def run_cctv_analysis(
             # Periodic progress update
             if frame_counter % 20 == 0:
                 pct = min(0.75, 0.30 + (frame_counter / 200.0) * 0.45)
-                update_progress(pct, f"Processed {frame_counter} frames... (Tracks: {len(tracker.active_tracks)})")
+                update_progress(pct, f"Processed {frame_counter} frames... (Vehicles: {len(vehicle_profiles)}, Collisions: {len(collision_detector.incidents)})")
 
         # Save best confidence keyframes for all tracks
         for tid, img in track_best_img.items():
@@ -321,7 +408,7 @@ def run_cctv_analysis(
                 tracker.active_tracks[tid]["best_keyframe"] = str(best_path)
 
         # Finalize tracks and evaluate exits
-        update_progress(0.80, "Finalizing trajectories and exit events...")
+        update_progress(0.80, "Finalizing trajectories and incident analytics...")
         final_tracks = tracker.finalize()
         event_extractor.evaluate_completed_tracks(final_tracks)
         events = event_extractor.get_events()
@@ -332,6 +419,20 @@ def run_cctv_analysis(
                 exit_path = keyframes_dir / "exits" / f"exit_{tid}_f{t.last_frame}.jpg"
                 cv2.imwrite(str(exit_path), track_best_img[tid])
                 t.last_keyframe = str(exit_path)
+
+        # Finalize vehicle profiles with incident logs
+        crashed_ids = collision_detector.get_crashed_track_ids()
+        all_collisions = collision_detector.get_all_incidents()
+        all_susp_alerts = suspicious_detector.get_all_alerts()
+
+        for tid, v_prof in vehicle_profiles.items():
+            if tid in crashed_ids:
+                v_prof.crash_involved = True
+                v_prof.crash_details = [
+                    c.description for c in all_collisions
+                    if c.primary_track_id == tid or c.secondary_track_id == tid
+                ]
+            v_prof.suspicious_activities = suspicious_detector.get_track_suspicious_activities(tid)
 
         # Step 15: Create annotated output video
         update_progress(0.85, "Encoding derived annotated video output...")
@@ -349,8 +450,8 @@ def run_cctv_analysis(
                 artifact_path=str(annotated_video_path)
             )
 
-        # Step 16: Export CSV, JSON logs, and summary
-        update_progress(0.92, "Exporting structured detection logs, CSVs, and dossier...")
+        # Step 16: Export CSV, JSON logs, vehicle registry, and summary dossier
+        update_progress(0.92, "Exporting structured detection logs, vehicle registry, CSVs, and dossier...")
         metadata["processing_finish_time"] = datetime.now(timezone.utc).isoformat()
         audit_summary = audit_logger.get_run_audit_summary(run_id)
 
@@ -361,7 +462,10 @@ def run_cctv_analysis(
             detections=all_detections,
             tracks=final_tracks,
             events=events,
-            audit_summary=audit_summary
+            audit_summary=audit_summary,
+            vehicles=[v.to_dict() for v in vehicle_profiles.values()],
+            collisions=[c.to_dict() for c in all_collisions],
+            suspicious_alerts=[a.to_dict() for a in all_susp_alerts]
         )
 
         for name, fpath in exported_files.items():
@@ -374,7 +478,7 @@ def run_cctv_analysis(
 
         # Mark run finished in audit log
         audit_logger.record_run_finish(run_id=run_id, status="COMPLETED")
-        update_progress(1.0, "CCTV forensic video analysis complete.")
+        update_progress(1.0, "CCTV forensic video analysis & vehicle incident extraction complete.")
 
         return {
             "status": "success",
@@ -387,13 +491,23 @@ def run_cctv_analysis(
             "annotated_video_path": str(annotated_video_path),
             "detections_csv_path": str(exported_files["detections_csv"]),
             "tracks_csv_path": str(exported_files["tracks_csv"]),
+            "vehicles_csv_path": str(exported_files["vehicles_csv"]),
+            "collisions_csv_path": str(exported_files["collisions_csv"]),
+            "suspicious_csv_path": str(exported_files["suspicious_csv"]),
             "events_json_path": str(exported_files["events_json"]),
             "summary_json_path": str(exported_files["summary_json"]),
+            "report_md_path": str(exported_files["report_md"]),
             "audit_log_json_path": str(exported_files["audit_log_json"]),
             "total_frames_processed": frame_counter,
             "total_detections": len(all_detections),
             "total_tracks": len(final_tracks),
+            "total_vehicles": len(vehicle_profiles),
+            "total_collisions": len(all_collisions),
+            "total_suspicious_alerts": len(all_susp_alerts),
             "total_events": len(events),
+            "vehicles": [v.to_dict() for v in vehicle_profiles.values()],
+            "collisions": [c.to_dict() for c in all_collisions],
+            "suspicious_activities": [a.to_dict() for a in all_susp_alerts],
             "events": [e.to_dict() for e in events],
             "tracks": final_tracks,
             "overview_keyframes": overview_keyframes[:10],
