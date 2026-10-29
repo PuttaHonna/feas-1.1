@@ -8,16 +8,25 @@ ENV/
 **/node_modules/
 forensic_react_dashboard/
 
-# Datasets and evidence storage
+# Datasets and evidence runtime directories
 data/
 FEAS/data/open_datasets/
-**/evidence_vault/
-**/working_copies/
-**/results/
-**/temp/
-**/runs/
-**/reports/
-**/storage/
+evidence_vault/
+working_copies/
+/results/
+/temp/
+/runs/
+/reports/
+/storage/
+FEAS/results/
+FEAS/temp/
+FEAS/runs/
+FEAS/reports/
+FEAS/storage/
+
+# CRITICAL: Always preserve all source code under src/
+!FEAS/src/**
+!src/**
 
 # Python cache & test artifacts
 **/__pycache__/
@@ -55,4 +64,3 @@ htmlcov/
 PLATFORMS.md
 scratch_datasets.txt
 notebooks/
-
