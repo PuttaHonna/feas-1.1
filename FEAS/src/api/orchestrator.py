@@ -12,17 +12,35 @@ from PIL import Image
 
 from src.config import EXECUTION_TIMEOUT_SECONDS, TEMP_DIR
 from src.db.audit import log_audit_event_sync, update_case_results_sync
-from src.models.audio.voice_forensics import analyze_audio_forensics
-from src.models.ballistics.striae_cnn import analyze_striae
-from src.models.deepfake.detector import detect_deepfake
-from src.models.face.pipeline import process_face
-from src.models.forgery.pipeline import run_forgery_check
-from src.models.wound.efficientnet_triage import predict_wound
 from src.pipeline.advanced_metadata import inspect_advanced_binary_metadata
 from src.pipeline.ingestion import compute_sha256_file
 
-# Thread pool for CPU/GPU bound model execution
-_executor = concurrent.futures.ThreadPoolExecutor(max_workers=6)
+# Thread pool for CPU/GPU bound model execution (2 workers to conserve RAM on cloud instances)
+_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+
+def _run_forgery_lazy(img, out_dir):
+    from src.models.forgery.pipeline import run_forgery_check
+    return run_forgery_check(img, out_dir)
+
+def _run_face_lazy(img, out_dir):
+    from src.models.face.pipeline import process_face
+    return process_face(img, out_dir)
+
+def _run_wound_lazy(img, out_dir):
+    from src.models.wound.efficientnet_triage import predict_wound
+    return predict_wound(img, out_dir)
+
+def _run_ballistics_lazy(img, out_dir):
+    from src.models.ballistics.striae_cnn import analyze_striae
+    return analyze_striae(img, out_dir)
+
+def _run_deepfake_lazy(img, out_dir):
+    from src.models.deepfake.detector import detect_deepfake
+    return detect_deepfake(img, out_dir)
+
+def _run_audio_lazy(src_path, out_dir):
+    from src.models.audio.voice_forensics import analyze_audio_forensics
+    return analyze_audio_forensics(src_path, out_dir)
 
 
 def _compute_overall_verdict(
@@ -94,13 +112,13 @@ async def run_parallel_forensic_analysis(
     loop = asyncio.get_running_loop()
     start_time = time.time()
 
-    # Define tasks for each forensic module
-    task_forgery = loop.run_in_executor(_executor, run_forgery_check, primary_image, case_dir / "forgery")
-    task_face = loop.run_in_executor(_executor, process_face, primary_image, case_dir / "face")
-    task_wound = loop.run_in_executor(_executor, predict_wound, primary_image, case_dir / "wound")
-    task_ballistics = loop.run_in_executor(_executor, analyze_striae, primary_image, case_dir / "ballistics")
-    task_deepfake = loop.run_in_executor(_executor, detect_deepfake, primary_image, case_dir / "deepfake")
-    task_audio = loop.run_in_executor(_executor, analyze_audio_forensics, source_media_path, case_dir / "audio")
+    # Define tasks for each forensic module (lazy runners)
+    task_forgery = loop.run_in_executor(_executor, _run_forgery_lazy, primary_image, case_dir / "forgery")
+    task_face = loop.run_in_executor(_executor, _run_face_lazy, primary_image, case_dir / "face")
+    task_wound = loop.run_in_executor(_executor, _run_wound_lazy, primary_image, case_dir / "wound")
+    task_ballistics = loop.run_in_executor(_executor, _run_ballistics_lazy, primary_image, case_dir / "ballistics")
+    task_deepfake = loop.run_in_executor(_executor, _run_deepfake_lazy, primary_image, case_dir / "deepfake")
+    task_audio = loop.run_in_executor(_executor, _run_audio_lazy, source_media_path, case_dir / "audio")
 
     try:
         # Execute all 6 engines concurrently with 12s timeout

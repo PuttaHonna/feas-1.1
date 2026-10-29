@@ -3,11 +3,21 @@ Forensic Evidence Analysis System (FEAS) - FastAPI Application Entry Point
 """
 
 from contextlib import asynccontextmanager
+import os
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+import torch
+
+# Optimize PyTorch thread pool for memory-constrained cloud environments (e.g. 512MB RAM)
+try:
+    torch.set_num_threads(1)
+    if hasattr(torch, "set_num_interop_threads"):
+        torch.set_num_interop_threads(1)
+except Exception:
+    pass
 
 from src.api.routes import router as api_router
 from src.api.firebase_routes import router as firebase_router

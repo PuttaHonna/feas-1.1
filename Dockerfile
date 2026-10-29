@@ -54,9 +54,21 @@ RUN mkdir -p /app/data/evidence_vault \
 # 8502: Deep Learning Forensic Investigator UI (Streamlit)
 EXPOSE 8000 8501 8502
 
+# Environment variables for minimal RAM footprint on 512MB cloud instances
+ENV PYTHONPATH=/app/FEAS \
+    PYTHONUNBUFFERED=1 \
+    OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    VECLIB_MAXIMUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1 \
+    KMP_DUPLICATE_LIB_OK=TRUE
+
+WORKDIR /app/FEAS
+
 # Healthcheck targeting FastAPI REST health endpoint
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
+    CMD curl -f http://localhost:${PORT:-10000}/health || exit 1
 
-# Default command: Launches FastAPI backend service on $PORT
-CMD ["python", "run.py", "api"]
+# Default command: Launches single-process FastAPI backend on $PORT with minimal RAM
+CMD ["sh", "-c", "exec python -m uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-10000} --workers 1"]

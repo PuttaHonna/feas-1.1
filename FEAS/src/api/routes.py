@@ -26,11 +26,6 @@ from src.db.audit import (
     list_cases_sync,
     log_audit_event_sync
 )
-from src.models.audio.voice_forensics import analyze_audio_forensics
-from src.models.deepfake.detector import detect_deepfake
-from src.models.wound.efficientnet_triage import predict_wound
-from src.models.ballistics.striae_cnn import analyze_striae
-from src.models.forgery.pipeline import run_forgery_check
 from src.pipeline.advanced_metadata import inspect_advanced_binary_metadata
 from src.pipeline.ingestion import process_uploaded_media
 from src.reports.batch_report import build_batch_pdf
@@ -122,10 +117,13 @@ async def analyze_evidence(
 
             # Route specialized modes directly to high-fidelity engines
             if mode == "bullet_detection":
+                from src.models.ballistics.striae_cnn import analyze_striae
                 return analyze_striae(img_bgr)
             elif mode == "wound_detection":
+                from src.models.wound.efficientnet_triage import predict_wound
                 return predict_wound(img_bgr)
             elif mode == "tamper_detection":
+                from src.models.forgery.pipeline import run_forgery_check
                 return run_forgery_check(img_bgr)
 
             # Otherwise encode to JPEG bytes and proceed with full parallel triage
@@ -328,6 +326,7 @@ async def analyze_deepfake_endpoint(
         
         case_id = f"DF-{uuid.uuid4().hex[:8].upper()}"
         out_dir = TEMP_DIR / "cases" / case_id / "deepfake"
+        from src.models.deepfake.detector import detect_deepfake
         return detect_deepfake(primary_image, out_dir)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Deepfake analysis failed: {str(e)}")
@@ -348,6 +347,7 @@ async def analyze_audio_endpoint(
         
         case_id = f"AUD-{uuid.uuid4().hex[:8].upper()}"
         out_dir = TEMP_DIR / "cases" / case_id / "audio"
+        from src.models.audio.voice_forensics import analyze_audio_forensics
         return analyze_audio_forensics(source_path, out_dir)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Audio analysis failed: {str(e)}")
@@ -386,6 +386,7 @@ async def analyze_wound_endpoint(
             raise HTTPException(status_code=400, detail="Invalid image provided for wound analysis.")
         case_id = f"WND-{uuid.uuid4().hex[:8].upper()}"
         out_dir = TEMP_DIR / "cases" / case_id / "wound"
+        from src.models.wound.efficientnet_triage import predict_wound
         return predict_wound(img_bgr, output_dir=out_dir)
     except HTTPException:
         raise
@@ -409,6 +410,7 @@ async def analyze_ballistics_endpoint(
             raise HTTPException(status_code=400, detail="Invalid image provided for ballistics analysis.")
         case_id = f"BAL-{uuid.uuid4().hex[:8].upper()}"
         out_dir = TEMP_DIR / "cases" / case_id / "ballistics"
+        from src.models.ballistics.striae_cnn import analyze_striae
         return analyze_striae(img_bgr, output_dir=out_dir)
     except HTTPException:
         raise
@@ -437,6 +439,7 @@ async def analyze_tampering_endpoint(
                 sensitivity = int(body.get("sensitivity", 75))
             except (ValueError, TypeError):
                 sensitivity = 75
+        from src.models.forgery.pipeline import run_forgery_check
         res = run_forgery_check(img_bgr, output_dir=out_dir, sensitivity=sensitivity)
         return res
     except HTTPException:
