@@ -34,6 +34,12 @@ from src.cctv.suspicious_detector import SuspiciousActivityDetector, SuspiciousA
 from src.cctv.line_crossing import LineCrossingCounter
 from src.cctv.audit_logger import CCTVAuditLogger
 from src.cctv.export_results import export_cctv_artifacts
+from src.cctv.tripwire_zone_service import TripwireZoneService, ZoneDefinition, TripwireDefinition
+from src.cctv.loitering_service import LoiteringDetector
+from src.cctv.stationary_object_service import UnattendedBaggageDetector
+from src.cctv.heatmap_service import CCTVHeatmapGenerator
+from src.cctv.camera_tamper_service import CameraTamperDetector
+from src.cctv.cctv_search_service import extract_dominant_color, CCTVSearchEngine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("CCTVPipeline")
@@ -56,6 +62,7 @@ def run_cctv_analysis(
     confidence_threshold: float = 0.25,
     tracking_method: str = "bytetrack",
     roi_polygon: Optional[List[Tuple[float, float]]] = None,
+    overlay_style: str = "tactical_hud",
     evidence_store_dir: Optional[Path | str] = None,
     results_dir: Optional[Path | str] = None,
     db_path: Optional[Path | str] = None,
@@ -228,6 +235,27 @@ def run_cctv_analysis(
         line_crossing_counter = LineCrossingCounter()
         vehicle_profiles: Dict[str, VehicleProfile] = {}
 
+        # Enterprise Surveillance Sub-engines
+        tripwire_zone_service = TripwireZoneService()
+        if roi_polygon and len(roi_polygon) >= 3:
+            tripwire_zone_service.add_zone(ZoneDefinition(
+                zone_id="ZONE-01",
+                name="Monitored Perimeter",
+                polygon=roi_polygon,
+                zone_type="restricted"
+            ))
+        loitering_detector = LoiteringDetector(
+            dwell_threshold_seconds=60.0,
+            snapshot_dir=str(keyframes_dir / "loitering")
+        )
+        unattended_baggage_detector = UnattendedBaggageDetector(
+            stationary_time_threshold_seconds=20.0
+        )
+        camera_tamper_detector = CameraTamperDetector()
+        heatmap_generator: Optional[CCTVHeatmapGenerator] = None
+        first_frame_raw: Optional[np.ndarray] = None
+        track_dominant_colors: Dict[str, str] = {}
+
         # 7. Extract, Enhance, Detect, Track, and Annotate Frames
         update_progress(0.30, "Streaming and analyzing video frames...")
         annotated_frames: List[np.ndarray] = []
@@ -255,6 +283,12 @@ def run_cctv_analysis(
             t_sec = frame_item.timestamp_seconds
             t_hms = frame_item.timestamp_hms
             raw_bgr = frame_item.image
+
+            if heatmap_generator is None and raw_bgr is not None:
+                first_frame_raw = raw_bgr.copy()
+                heatmap_generator = CCTVHeatmapGenerator(frame_width=raw_bgr.shape[1], frame_height=raw_bgr.shape[0])
+            if raw_bgr is not None:
+                camera_tamper_detector.process_frame(raw_bgr, f_idx, t_sec)
 
             # Step 10: Apply targeted enhancement with degradation diagnosis & automated fallback
             if str(enhancement_mode).lower().replace("-", "_") in ("adaptive_smart", "smart", "adaptive"):
@@ -399,6 +433,65 @@ def run_cctv_analysis(
                 timestamp_hms=t_hms
             )
 
+            # Step 13.6: Enterprise CCTV Analytics: Tripwires, Zones, Loitering, Baggage & Density
+            person_centroids = []
+            baggage_candidates = []
+            for det in tracked_detections:
+                tid = det.track_id
+                if not tid:
+                    continue
+                if heatmap_generator:
+                    heatmap_generator.add_point(det.centroid_x, det.centroid_y)
+
+                if tid not in track_dominant_colors:
+                    x1, y1 = max(0, int(det.x1)), max(0, int(det.y1))
+                    x2, y2 = min(raw_bgr.shape[1], int(det.x2)), min(raw_bgr.shape[0], int(det.y2))
+                    det_crop = enhanced_bgr[y1:y2, x1:x2]
+                    if det_crop.size > 0:
+                        track_dominant_colors[tid] = extract_dominant_color(det_crop)
+
+                if det.class_name == "person":
+                    person_centroids.append((det.centroid_x, det.centroid_y))
+                elif det.class_name in UnattendedBaggageDetector.BAGGAGE_CLASSES:
+                    baggage_candidates.append({
+                        "track_id": tid,
+                        "class_name": det.class_name,
+                        "centroid": (det.centroid_x, det.centroid_y),
+                        "bbox": (det.x1, det.y1, det.x2, det.y2)
+                    })
+
+                tripwire_zone_service.process_track(
+                    track_id=tid,
+                    track_number=getattr(det, "track_number", 0),
+                    class_name=det.class_name,
+                    centroid=(det.centroid_x, det.centroid_y),
+                    bbox=(det.x1, det.y1, det.x2, det.y2),
+                    frame_number=f_idx,
+                    timestamp_seconds=t_sec
+                )
+
+                is_in_monitored = tripwire_zone_service._is_point_in_polygon((det.centroid_x, det.centroid_y), roi_polygon) if roi_polygon else True
+                loitering_detector.update_track_state(
+                    zone_id="ZONE-01" if roi_polygon else "ZONE-SURVEILLANCE",
+                    zone_name="Monitored Area",
+                    is_inside_zone=is_in_monitored,
+                    track_id=tid,
+                    track_number=getattr(det, "track_number", 0),
+                    class_name=det.class_name,
+                    centroid=(det.centroid_x, det.centroid_y),
+                    bbox=(det.x1, det.y1, det.x2, det.y2),
+                    frame_number=f_idx,
+                    current_time_s=t_sec,
+                    frame_bgr=enhanced_bgr
+                )
+
+            unattended_baggage_detector.evaluate_frame(
+                baggage_detections=baggage_candidates,
+                person_centroids=person_centroids,
+                frame_number=f_idx,
+                timestamp_s=t_sec
+            )
+
             # Step 14: Render derived visualization overlay with vehicle attributes & alerts
             annotated_frame = draw_detection_overlay(
                 frame_bgr=enhanced_bgr,
@@ -409,8 +502,10 @@ def run_cctv_analysis(
                 crashed_track_ids=collision_detector.get_crashed_track_ids(),
                 suspicious_track_ids=suspicious_detector.flagged_activities,
                 line_crossing_counter=line_crossing_counter,
-                overlay_style="reference_mot"
+                overlay_style=overlay_style,
+                camera_id=camera_id
             )
+            annotated_frame = tripwire_zone_service.render_overlays(annotated_frame)
             annotated_frames.append(annotated_frame)
             all_detections.extend(tracked_detections)
 
@@ -505,6 +600,21 @@ def run_cctv_analysis(
                 artifact_path=str(fpath)
             )
 
+        # Generate & save crowd density heatmap
+        heatmap_summary = None
+        if heatmap_generator:
+            heatmaps_dir = results_base / "heatmaps"
+            heatmaps_dir.mkdir(parents=True, exist_ok=True)
+            heatmap_path = heatmaps_dir / f"{evidence_id}_density.jpg"
+            heatmap_summary = heatmap_generator.save_heatmap(
+                output_path=heatmap_path,
+                background_frame=first_frame_raw
+            ).to_dict()
+
+        for tid, t in final_tracks.items():
+            if hasattr(t, "dominant_color"):
+                t.dominant_color = track_dominant_colors.get(tid, "unclassified")
+
         # Mark run finished in audit log
         audit_logger.record_run_finish(run_id=run_id, status="COMPLETED")
         update_progress(1.0, "CCTV forensic video analysis & vehicle incident extraction complete.")
@@ -533,10 +643,20 @@ def run_cctv_analysis(
             "total_vehicles": len(vehicle_profiles),
             "total_collisions": len(all_collisions),
             "total_suspicious_alerts": len(all_susp_alerts),
+            "total_perimeter_intrusions": len(tripwire_zone_service.intrusion_alerts),
+            "total_loitering_alerts": len(loitering_detector.alerts),
+            "total_unattended_alerts": len(unattended_baggage_detector.alerts),
+            "total_tamper_alerts": len(camera_tamper_detector.alerts),
             "total_events": len(events),
             "vehicles": [v.to_dict() for v in vehicle_profiles.values()],
             "collisions": [c.to_dict() for c in all_collisions],
             "suspicious_activities": [a.to_dict() for a in all_susp_alerts],
+            "perimeter_intrusions": [i.to_dict() for i in tripwire_zone_service.intrusion_alerts],
+            "loitering_alerts": [l.to_dict() for l in loitering_detector.alerts],
+            "unattended_baggage_alerts": [u.to_dict() for u in unattended_baggage_detector.alerts],
+            "camera_tamper_alerts": [t.to_dict() for t in camera_tamper_detector.alerts],
+            "tripwire_crossings": [c.to_dict() for c in tripwire_zone_service.crossing_events],
+            "heatmap": heatmap_summary,
             "events": [e.to_dict() for e in events],
             "tracks": [t.to_dict() if hasattr(t, "to_dict") else vars(t) for t in final_tracks.values()],
             "overview_keyframes": overview_keyframes[:10],

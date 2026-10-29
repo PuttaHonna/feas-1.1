@@ -557,7 +557,10 @@ async def analyze_cctv_endpoint(
     analysis_mode: str = Form("fast_review"),
     enhancement_mode: str = Form("deep_learning"),
     confidence_threshold: float = Form(0.25),
-    yolo_model: str = Form("yolov8n.pt")
+    yolo_model: str = Form("yolov8n.pt"),
+    roi_polygon: Optional[str] = Form(None),
+    overlay_style: str = Form("tactical_hud"),
+    tracking_method: str = Form("bytetrack")
 ) -> Dict[str, Any]:
     """
     Dedicated endpoint for CCTV Video Analysis:
@@ -580,6 +583,14 @@ async def analyze_cctv_endpoint(
         with open(raw_path, "wb") as f:
             f.write(content)
 
+        parsed_roi = None
+        if roi_polygon:
+            try:
+                raw_pts = json.loads(roi_polygon)
+                parsed_roi = [(float(p[0]), float(p[1])) for p in raw_pts]
+            except Exception:
+                parsed_roi = None
+
         from src.cctv_pipeline import run_cctv_analysis
         res = run_cctv_analysis(
             input_video_path=raw_path,
@@ -591,6 +602,9 @@ async def analyze_cctv_endpoint(
             enhancement_mode=enhancement_mode,
             confidence_threshold=confidence_threshold,
             yolo_model_name=yolo_model,
+            tracking_method=tracking_method,
+            roi_polygon=parsed_roi,
+            overlay_style=overlay_style,
             results_dir=results_cctv,
             evidence_store_dir=results_cctv / "evidence_store"
         )
@@ -643,7 +657,122 @@ async def analyze_cctv_endpoint(
             event_list.append(ed)
         res["events"] = event_list
 
+        # Format crowd density heatmap URL
+        hm = res.get("heatmap")
+        if hm and isinstance(hm, dict) and hm.get("output_image_path"):
+            hm["output_url"] = to_web_url(hm.get("output_image_path"))
+
         return res
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"CCTV analysis failed: {str(e)}")
+
+
+ACTIVE_RTSP_WORKERS: Dict[str, Any] = {}
+
+
+@router.post("/cctv/search", tags=["CCTV Surveillance Engine"])
+async def search_cctv_endpoint(
+    request: Request
+) -> Dict[str, Any]:
+    """
+    Multi-modal temporal and attribute search engine over surveillance tracks and events.
+    Supports natural text search (e.g. 'red car', 'person loitering') or structured filter attributes.
+    """
+    try:
+        from src.cctv.cctv_search_service import CCTVSearchEngine, SearchQuery
+        body = await request.json()
+        query_text = body.get("query", "")
+        tracks = body.get("tracks", [])
+        events = body.get("events", [])
+
+        engine = CCTVSearchEngine(tracks=tracks, events=events)
+        if query_text:
+            parsed = engine.parse_natural_query(query_text)
+        else:
+            parsed = SearchQuery(
+                target_class=body.get("class"),
+                color=body.get("color"),
+                min_timestamp_s=body.get("min_time"),
+                max_timestamp_s=body.get("max_time"),
+                event_type=body.get("event_type")
+            )
+
+        matched_tracks = engine.search_tracks(parsed)
+        matched_events = engine.search_events(parsed)
+
+        return {
+            "status": "success",
+            "query": parsed.__dict__,
+            "total_matched_tracks": len(matched_tracks),
+            "total_matched_events": len(matched_events),
+            "matched_tracks": matched_tracks,
+            "matched_events": matched_events
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"CCTV search failed: {str(e)}")
+
+
+@router.post("/cctv/stream/start", tags=["CCTV Surveillance Engine"])
+async def start_cctv_stream_endpoint(
+    request: Request
+) -> Dict[str, Any]:
+    """
+    Start background ingestion worker for an IP camera RTSP/RTMP/HLS stream.
+    """
+    try:
+        from src.cctv.rtsp_service import RTSPStreamWorker
+        body = await request.json()
+        stream_uri = body.get("stream_uri", "")
+        camera_id = body.get("camera_id", f"CAM-{uuid.uuid4().hex[:4]}")
+
+        if not stream_uri:
+            raise HTTPException(status_code=400, detail="Missing 'stream_uri' in request body.")
+
+        if camera_id in ACTIVE_RTSP_WORKERS:
+            ACTIVE_RTSP_WORKERS[camera_id].stop()
+
+        worker = RTSPStreamWorker(stream_uri=stream_uri)
+        connected = worker.start()
+        ACTIVE_RTSP_WORKERS[camera_id] = worker
+
+        return {
+            "status": "success",
+            "camera_id": camera_id,
+            "connected": connected,
+            "telemetry": worker.get_status()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start stream: {str(e)}")
+
+
+@router.get("/cctv/stream/status", tags=["CCTV Surveillance Engine"])
+async def get_cctv_stream_status_endpoint(
+    camera_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """Get telemetry status for active CCTV streams."""
+    if camera_id:
+        worker = ACTIVE_RTSP_WORKERS.get(camera_id)
+        if not worker:
+            raise HTTPException(status_code=404, detail=f"No active stream found for camera '{camera_id}'")
+        return {"status": "success", "camera_id": camera_id, "telemetry": worker.get_status()}
+
+    return {
+        "status": "success",
+        "active_streams_count": len(ACTIVE_RTSP_WORKERS),
+        "streams": {cid: w.get_status() for cid, w in ACTIVE_RTSP_WORKERS.items()}
+    }
+
+
+@router.post("/cctv/stream/stop", tags=["CCTV Surveillance Engine"])
+async def stop_cctv_stream_endpoint(
+    request: Request
+) -> Dict[str, Any]:
+    """Stop active CCTV IP camera stream."""
+    body = await request.json()
+    camera_id = body.get("camera_id")
+    if camera_id in ACTIVE_RTSP_WORKERS:
+        ACTIVE_RTSP_WORKERS[camera_id].stop()
+        del ACTIVE_RTSP_WORKERS[camera_id]
+        return {"status": "success", "message": f"Stream '{camera_id}' stopped."}
+    return {"status": "not_found", "message": "Camera stream was not running."}
 

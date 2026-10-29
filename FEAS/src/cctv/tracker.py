@@ -31,12 +31,14 @@ class TrackSummary:
     first_keyframe: Optional[str] = None
     best_keyframe: Optional[str] = None
     last_keyframe: Optional[str] = None
+    dominant_color: Optional[str] = "unclassified"
     trajectory: List[Tuple[float, float, float]] = field(default_factory=list)  # (x, y, timestamp)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "track_id": self.track_id,
             "class": self.class_name,
+            "dominant_color": self.dominant_color,
             "first_seen_timestamp": f"{self.first_seen_seconds:.2f}s",
             "last_seen_timestamp": f"{self.last_seen_seconds:.2f}s",
             "visible_duration": f"{self.visible_duration_seconds:.2f}s",
