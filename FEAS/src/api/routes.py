@@ -640,8 +640,10 @@ async def analyze_cctv_endpoint(
         res["storage_backend"] = "LOCAL_CONTAINER"
         res["is_cloud_stored"] = False
 
-        # Cloudflare R2 Zero-Egress Cloud Storage Archiving
+        # Cloud Storage Archiving (Cloudflare R2, Firebase Cloud Storage, or Auto-Cleanup)
         from src.services.r2_storage_service import r2_service
+        from src.services.firebase_service import firebase_forensics
+
         if r2_service.is_configured():
             r2_arch = r2_service.process_and_archive_cctv_run(
                 case_id=case_id,
@@ -654,6 +656,26 @@ async def analyze_cctv_endpoint(
                 res["annotated_video_url"] = r2_arch["artifacts"]["annotated_video"]["url"]
                 res["storage_backend"] = "CLOUDFLARE_R2"
                 res["is_cloud_stored"] = True
+        elif firebase_forensics.is_live:
+            fb_arch = firebase_forensics.process_and_archive_cctv_run(
+                case_id=case_id,
+                evidence_id=evidence_id,
+                annotated_video_path=res.get("annotated_video_path"),
+                raw_video_path=raw_path,
+                keyframe_paths=res.get("overview_keyframes", []),
+                auto_clean_local=True
+            )
+            if fb_arch.get("cloud_active") and "annotated_video" in fb_arch.get("artifacts", {}):
+                res["annotated_video_url"] = fb_arch["artifacts"]["annotated_video"]["url"]
+                res["storage_backend"] = "FIREBASE_CLOUD"
+                res["is_cloud_stored"] = True
+        else:
+            # Standalone container fallback: auto-clean heavy raw video to prevent disk bloat
+            if raw_path.exists():
+                try:
+                    raw_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
 
         # Format overview keyframe URLs
         kf_urls = []

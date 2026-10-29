@@ -263,6 +263,65 @@ class FirebaseForensicService:
             "uploaded_at": datetime.now(timezone.utc).isoformat(),
         }
 
+    def process_and_archive_cctv_run(
+        self,
+        case_id: str,
+        evidence_id: str,
+        annotated_video_path: Optional[Union[str, Path]] = None,
+        raw_video_path: Optional[Union[str, Path]] = None,
+        keyframe_paths: Optional[List[Union[str, Path]]] = None,
+        auto_clean_local: bool = True,
+    ) -> Dict[str, Any]:
+        """Upload CCTV evidence artifacts to Firebase Cloud Storage and clean local storage."""
+        if not self.is_live or not self.storage_bucket:
+            return {"cloud_active": False, "storage": "LOCAL"}
+
+        uploaded_artifacts = {}
+
+        # 1. Upload Annotated Video
+        if annotated_video_path:
+            p_annotated = Path(annotated_video_path)
+            if p_annotated.exists():
+                blob_name = f"cases/{case_id}/videos/{evidence_id}_annotated.mp4"
+                up_res = self.upload_evidence_file(p_annotated, blob_name, content_type="video/mp4")
+                if up_res:
+                    uploaded_artifacts["annotated_video"] = up_res
+                    if auto_clean_local:
+                        try:
+                            p_annotated.unlink(missing_ok=True)
+                            logger.info(f"Local annotated video cleaned: {p_annotated}")
+                        except Exception as e:
+                            logger.warning(f"Could not remove local annotated file: {e}")
+
+        # 2. Upload Keyframes
+        kf_uploaded = []
+        for kf in keyframe_paths or []:
+            p_kf = Path(kf)
+            if p_kf.exists():
+                blob_kf = f"cases/{case_id}/keyframes/{evidence_id}_{p_kf.name}"
+                up_kf = self.upload_evidence_file(p_kf, blob_kf, content_type="image/jpeg")
+                if up_kf:
+                    kf_uploaded.append(up_kf)
+        if kf_uploaded:
+            uploaded_artifacts["keyframes"] = kf_uploaded
+
+        # 3. Clean raw input video from local disk to prevent container bloat
+        if raw_video_path and auto_clean_local:
+            p_raw = Path(raw_video_path)
+            if p_raw.exists():
+                try:
+                    p_raw.unlink(missing_ok=True)
+                    logger.info(f"Local raw input video cleaned: {p_raw}")
+                except Exception as e:
+                    logger.warning(f"Could not remove local raw file: {e}")
+
+        return {
+            "cloud_active": True,
+            "storage": "FIREBASE_CLOUD",
+            "bucket": self.bucket_name,
+            "artifacts": uploaded_artifacts,
+        }
+
     def upload_bytes(
         self,
         data: bytes,

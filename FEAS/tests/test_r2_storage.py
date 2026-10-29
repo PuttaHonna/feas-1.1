@@ -84,3 +84,4 @@ def test_r2_upload_and_auto_clean(tmp_path: Path):
             # Ensure local raw and annotated files were cleaned up to preserve container disk
             assert not dummy_video.exists()
             assert not dummy_raw.exists()
+
