@@ -48,6 +48,13 @@ async def health_check() -> Dict[str, Any]:
     }
 
 
+@router.get("/storage/r2/status", tags=["System"])
+async def r2_storage_status() -> Dict[str, Any]:
+    """Return live status and diagnostic info for Cloudflare R2 cloud storage."""
+    from src.services.r2_storage_service import r2_service
+    return r2_service.get_status()
+
+
 async def decode_request_image(request: Request, file: Optional[UploadFile] = None) -> Tuple[Optional[np.ndarray], str, Dict[str, Any]]:
     """Decode image from either multipart form upload or JSON body (base64 or local sample path)."""
     img_bgr = None
@@ -630,6 +637,23 @@ async def analyze_cctv_endpoint(
 
         res["annotated_video_url"] = annotated_url
         res["original_video_url"] = original_url
+        res["storage_backend"] = "LOCAL_CONTAINER"
+        res["is_cloud_stored"] = False
+
+        # Cloudflare R2 Zero-Egress Cloud Storage Archiving
+        from src.services.r2_storage_service import r2_service
+        if r2_service.is_configured():
+            r2_arch = r2_service.process_and_archive_cctv_run(
+                case_id=case_id,
+                evidence_id=evidence_id,
+                annotated_video_path=res.get("annotated_video_path"),
+                raw_video_path=raw_path,
+                keyframe_paths=res.get("overview_keyframes", [])
+            )
+            if r2_arch.get("cloud_active") and "annotated_video" in r2_arch.get("artifacts", {}):
+                res["annotated_video_url"] = r2_arch["artifacts"]["annotated_video"]["url"]
+                res["storage_backend"] = "CLOUDFLARE_R2"
+                res["is_cloud_stored"] = True
 
         # Format overview keyframe URLs
         kf_urls = []
