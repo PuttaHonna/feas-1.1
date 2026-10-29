@@ -305,6 +305,7 @@ def run_services(targets: List[str]):
         # 1. FastAPI REST Backend
         if "api" in targets or "all" in targets or "feas" in targets:
             api_cwd = ROOT_DIR / "FEAS"
+            api_port = os.environ.get("PORT", "8000")
             cmd = [
                 sys.executable,
                 "-m",
@@ -313,9 +314,9 @@ def run_services(targets: List[str]):
                 "--host",
                 "0.0.0.0",
                 "--port",
-                "8000",
+                str(api_port),
             ]
-            processes.append(("FEAS FastAPI Backend (Port 8000)", launch_process(cmd, api_cwd, "FEAS FastAPI Backend")))
+            processes.append((f"FEAS FastAPI Backend (Port {api_port})", launch_process(cmd, api_cwd, "FEAS FastAPI Backend")))
 
         # 2. FEAS Forensic Workstation UI (Streamlit)
         if "workstation" in targets or "all" in targets or "feas" in targets:

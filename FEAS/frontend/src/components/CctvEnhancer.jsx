@@ -7,6 +7,7 @@ import {
 import LatticeLoader from './LatticeLoader';
 import CloudSyncButton from './CloudSyncButton';
 import { firebaseService } from '../services/firebase';
+import { getApiUrl, getMediaUrl } from '../services/apiConfig';
 
 export default function CctvEnhancer() {
   const [mediaType, setMediaType] = useState(null); // 'video' | 'image'
@@ -136,7 +137,7 @@ export default function CctvEnhancer() {
       setTimeout(() => setProgressMsg('Running YOLO detection & ByteTrack trajectory tracking...'), 3200);
       setTimeout(() => setProgressMsg('Evaluating perimeter zones, loitering & stationary baggage...'), 5200);
 
-      const resp = await fetch('/api/v1/cctv/analyze', {
+      const resp = await fetch(getApiUrl('/api/v1/cctv/analyze'), {
         method: 'POST',
         body: formData
       });
@@ -202,12 +203,12 @@ export default function CctvEnhancer() {
         formData.append('denoise_level', denoiseLevel.toString());
         formData.append('low_light_boost', nightVision ? 'true' : 'false');
 
-        resp = await fetch('/api/v1/cctv/enhance-frame', {
+        resp = await fetch(getApiUrl('/api/v1/cctv/enhance-frame'), {
           method: 'POST',
           body: formData
         });
       } else if (fileSrc) {
-        resp = await fetch('/api/v1/cctv/enhance-frame', {
+        resp = await fetch(getApiUrl('/api/v1/cctv/enhance-frame'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -761,7 +762,7 @@ export default function CctvEnhancer() {
                       />
                       {videoResults?.annotated_video_url && (
                         <a
-                          href={videoResults.annotated_video_url}
+                          href={getMediaUrl(videoResults.annotated_video_url)}
                           download="cctv_enhanced_annotated.mp4"
                           className="btn btn-secondary"
                           style={{ fontSize: '0.8rem', padding: '6px 14px' }}
@@ -777,7 +778,7 @@ export default function CctvEnhancer() {
                     {/* Left: Original Raw Video */}
                     <div className="video-player-box">
                       <div className="frame-tag raw">Original Raw CCTV Stream</div>
-                      <video src={videoResults?.original_video_url || fileSrc} controls autoPlay loop muted playsInline />
+                      <video src={getMediaUrl(videoResults?.original_video_url) || fileSrc} controls autoPlay loop muted playsInline />
                       <div className="video-meta-bar">
                         <span>Original Ingestion Copy</span>
                         <span style={{ color: 'var(--text-dim)', fontSize: '0.7rem' }}>Immutable SHA-256 Verified</span>
@@ -791,7 +792,7 @@ export default function CctvEnhancer() {
                       </div>
                       <video
                         ref={annotatedVideoRef}
-                        src={videoResults?.annotated_video_url || fileSrc}
+                        src={getMediaUrl(videoResults?.annotated_video_url) || fileSrc}
                         controls
                         autoPlay
                         loop
@@ -1230,9 +1231,9 @@ export default function CctvEnhancer() {
                               key={idx}
                               className="keyframe-item"
                               style={{ cursor: 'pointer' }}
-                              onClick={() => setPreviewImageModal({ url: kfUrl, title: `Overview Keyframe #${idx + 1}`, path: kfUrl })}
+                              onClick={() => setPreviewImageModal({ url: getMediaUrl(kfUrl), title: `Overview Keyframe #${idx + 1}`, path: kfUrl })}
                             >
-                              <img src={kfUrl} alt={`Keyframe ${idx + 1}`} />
+                              <img src={getMediaUrl(kfUrl)} alt={`Keyframe ${idx + 1}`} />
                               <div className="keyframe-title">Keyframe #{idx + 1}</div>
                             </div>
                           ))}
@@ -1343,7 +1344,7 @@ export default function CctvEnhancer() {
                         {videoResults.heatmap.output_url && (
                           <div style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(236, 72, 153, 0.3)', background: '#000', textAlign: 'center' }}>
                             <img
-                              src={videoResults.heatmap.output_url}
+                              src={getMediaUrl(videoResults.heatmap.output_url)}
                               alt="Crowd Density Heatmap"
                               style={{ width: '100%', maxHeight: '500px', objectFit: 'contain' }}
                             />
@@ -1687,7 +1688,7 @@ export default function CctvEnhancer() {
                   }
                   setRtspStatus("Initiating background IP stream worker...");
                   try {
-                    const r = await fetch('/api/v1/cctv/stream/start', {
+                    const r = await fetch(getApiUrl('/api/v1/cctv/stream/start'), {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ stream_uri: rtspUrl, camera_id: 'CAM-LIVE-01' })
