@@ -1,45 +1,46 @@
 # ====================================================================
-# FEAS 2.0 & Deep Learning Forensic Investigator
-# Multi-Platform Production Dockerfile (linux/amd64 & linux/arm64)
-# Compatible with Windows Docker Desktop, macOS Docker (Apple Silicon),
-# and Linux Docker Engine.
+# FEAS 2.0 - Production Dockerfile Optimized for 512MB RAM
+# Multi-Platform: linux/amd64 & linux/arm64
 # ====================================================================
 
 FROM python:3.11-slim
 
-# Prevent interactive prompts during package install
+# Prevent interactive prompts during package install & optimize CPU threads
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    KMP_DUPLICATE_LIB_OK=TRUE
+    KMP_DUPLICATE_LIB_OK=TRUE \
+    OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    VECLIB_MAXIMUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1 \
+    TORCH_NUM_THREADS=1
 
-# Install OS libraries for OpenCV, Video Decoding, and PDF generation
+# Install minimal OS libraries required for OpenCV and FFmpeg video processing
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
     ffmpeg \
     libgl1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
-    libxrender-dev \
-    sqlite3 \
     curl \
-    git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy unified requirements first to leverage Docker layer caching
-COPY requirements.txt /app/
-
-# Install Python dependencies (universal wheels)
+# Step 1: Install CPU-only PyTorch & Torchvision first (saves ~2.5 GB download and ~200MB RAM)
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
-# Copy complete repository structure
+# Step 2: Install dependencies (leveraging pre-installed CPU torch)
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
+
+# Step 3: Copy repository structure (respecting .dockerignore)
 COPY . /app/
 
-# Ensure all evidence vault, storage, and report directories exist
+# Ensure all runtime evidence, storage, and report directories exist
 RUN mkdir -p /app/data/evidence_vault \
              /app/data/working_copies \
              /app/data/artifacts \
@@ -48,22 +49,9 @@ RUN mkdir -p /app/data/evidence_vault \
              /app/FEAS/temp \
              /app/FEAS/data
 
-# Ports:
-# 8000: FEAS FastAPI Backend & Swagger Docs
-# 8501: FEAS Forensic Workstation UI (Streamlit)
-# 8502: Deep Learning Forensic Investigator UI (Streamlit)
-EXPOSE 8000 8501 8502
+EXPOSE 8000 10000
 
-# Environment variables for minimal RAM footprint on 512MB cloud instances
-ENV PYTHONPATH=/app/FEAS \
-    PYTHONUNBUFFERED=1 \
-    OMP_NUM_THREADS=1 \
-    MKL_NUM_THREADS=1 \
-    OPENBLAS_NUM_THREADS=1 \
-    VECLIB_MAXIMUM_THREADS=1 \
-    NUMEXPR_NUM_THREADS=1 \
-    KMP_DUPLICATE_LIB_OK=TRUE
-
+ENV PYTHONPATH=/app/FEAS
 WORKDIR /app/FEAS
 
 # Healthcheck targeting FastAPI REST health endpoint

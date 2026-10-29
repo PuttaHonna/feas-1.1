@@ -1,0 +1,57 @@
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Dependencies & node_modules
+**/node_modules/
+forensic_react_dashboard/
+
+# Datasets and evidence storage
+data/
+FEAS/data/open_datasets/
+**/evidence_vault/
+**/working_copies/
+**/results/
+**/temp/
+**/runs/
+**/reports/
+**/storage/
+
+# Python cache & test artifacts
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Git & Editor metadata
+.git/
+.github/
+.vscode/
+.idea/
+.agent/
+.agents/
+.gemini/
+.gsd/
+
+# Large video files
+**/*.mp4
+**/*.mkv
+**/*.avi
+**/*.mov
+
+# Heavy model weights (only lightweight yolov8n.pt is used)
+**/*.pt.part
+**/yolov8m.pt
+**/yolov8s.pt
+**/yolov8l.pt
+**/yolov8x.pt
+
+# Documentation & scratch
+PLATFORMS.md
+scratch_datasets.txt
+notebooks/

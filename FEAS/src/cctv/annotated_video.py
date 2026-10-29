@@ -486,7 +486,7 @@ def draw_detection_overlay(
 
 
 def generate_annotated_video(
-    annotated_frames: List[np.ndarray],
+    annotated_frames: Sequence[Union[np.ndarray, Path, str]],
     output_path: Path | str,
     fps: float = 25.0,
     width: Optional[int] = None,
@@ -496,9 +496,8 @@ def generate_annotated_video(
 ) -> Path:
     """Encode a sequence of annotated frames into a 100% browser-compatible H.264 MP4 video.
     
-    If target_duration is specified (e.g. source video duration in seconds), frames are repeated
-    so that the output video plays at the correct, natural real-time pace instead of flashing by
-    in a fraction of a second when frames were sampled at 1 FPS.
+    Supports both in-memory numpy arrays and disk-backed image file paths to guarantee
+    sub-512MB RAM streaming execution even on long videos.
     """
     dest = Path(output_path)
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -506,7 +505,16 @@ def generate_annotated_video(
     if not annotated_frames:
         raise ValueError("Cannot write video: frame list is empty.")
 
-    h, w = annotated_frames[0].shape[:2]
+    first_item = annotated_frames[0]
+    if isinstance(first_item, (str, Path)):
+        probe = cv2.imread(str(first_item))
+        if probe is None:
+            raise ValueError(f"Cannot read first frame from {first_item}")
+        h, w = probe.shape[:2]
+        del probe
+    else:
+        h, w = first_item.shape[:2]
+
     out_w = width or w
     out_h = height or h
     # Ensure even dimensions for H.264 macroblocks
@@ -554,12 +562,21 @@ def generate_annotated_video(
             str(dest)
         ]
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-        for f in annotated_frames:
+        for item in annotated_frames:
+            if isinstance(item, (str, Path)):
+                f = cv2.imread(str(item))
+            else:
+                f = item
+            if f is None:
+                continue
+
             if f.shape[1] != out_w or f.shape[0] != out_h:
                 f_resized = cv2.resize(f, (out_w, out_h))
                 f_bytes = f_resized.tobytes()
+                del f_resized
             else:
                 f_bytes = f.tobytes()
+            del f
 
             for _ in range(repeats_per_frame):
                 proc.stdin.write(f_bytes)
@@ -580,7 +597,14 @@ def generate_annotated_video(
         writer = cv2.VideoWriter(str(dest), fourcc, playback_fps, (out_w, out_h))
 
     try:
-        for f in annotated_frames:
+        for item in annotated_frames:
+            if isinstance(item, (str, Path)):
+                f = cv2.imread(str(item))
+            else:
+                f = item
+            if f is None:
+                continue
+
             if f.shape[1] != out_w or f.shape[0] != out_h:
                 f_resized = cv2.resize(f, (out_w, out_h))
             else:
@@ -588,6 +612,8 @@ def generate_annotated_video(
 
             for _ in range(repeats_per_frame):
                 writer.write(f_resized)
+            del f_resized
+            del f
     finally:
         writer.release()
 

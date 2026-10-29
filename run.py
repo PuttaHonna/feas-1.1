@@ -316,6 +316,15 @@ def run_services(targets: List[str]):
                 "--port",
                 str(api_port),
             ]
+            if len(targets) == 1 and targets[0] == "api" and sys.platform != "win32":
+                # Single-process direct exec for zero memory overhead on Render/Docker/Linux
+                env = os.environ.copy()
+                curr_pp = env.get("PYTHONPATH", "")
+                env["PYTHONPATH"] = str(api_cwd) + (os.pathsep + curr_pp if curr_pp else "")
+                os.chdir(str(api_cwd))
+                print(f"  {CYAN}⚡ Executing FEAS FastAPI Backend via single-process exec (Port {api_port})...{RESET}")
+                os.execvpe(sys.executable, cmd, env)
+
             processes.append((f"FEAS FastAPI Backend (Port {api_port})", launch_process(cmd, api_cwd, "FEAS FastAPI Backend")))
 
         # 2. FEAS Forensic Workstation UI (Streamlit)

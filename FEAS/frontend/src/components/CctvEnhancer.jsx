@@ -145,7 +145,7 @@ export default function CctvEnhancer() {
       const contentType = resp.headers.get('content-type') || '';
       if (contentType.includes('text/html')) {
         throw new Error(
-          'API Server Notice: Received HTML instead of JSON. If you are accessing this site via Firebase Hosting (feas-forensics.web.app), please note that Firebase Hosting only hosts static frontend assets. Deep AI video analytics run locally on your backend server at http://localhost:5174 (port 8000), or via a deployed Cloud Run container.'
+          'Render backend is currently waking up from standby (free-tier cold start takes ~30-45 seconds). Please wait a moment and click Analyze again! Alternatively, you can use your local server at http://localhost:5174 for instant processing.'
         );
       }
 

@@ -1,7 +1,8 @@
 # FEAS 2.0 - Universal Cross-Platform Dependencies
 # Compatible with Windows, macOS (Intel & Apple Silicon M-series), Linux, and Docker
+--extra-index-url https://download.pytorch.org/whl/cpu
 
-# Deep Learning & Computer Vision
+# Deep Learning & Computer Vision (CPU-optimized for 512MB RAM cloud environments)
 torch>=2.1.0
 torchvision>=0.16.0
 ultralytics>=8.1.0

@@ -258,7 +258,9 @@ def run_cctv_analysis(
 
         # 7. Extract, Enhance, Detect, Track, and Annotate Frames
         update_progress(0.30, "Streaming and analyzing video frames...")
-        annotated_frames: List[np.ndarray] = []
+        temp_frames_dir = results_base / "temp_frames" / evidence_id
+        temp_frames_dir.mkdir(parents=True, exist_ok=True)
+        annotated_frames: List[Path] = []
         all_detections = []
         overview_keyframes = []
 
@@ -506,11 +508,16 @@ def run_cctv_analysis(
                 camera_id=camera_id
             )
             annotated_frame = tripwire_zone_service.render_overlays(annotated_frame)
-            annotated_frames.append(annotated_frame)
+            frame_temp_file = temp_frames_dir / f"hud_{frame_counter:06d}.jpg"
+            cv2.imwrite(str(frame_temp_file), annotated_frame)
+            annotated_frames.append(frame_temp_file)
+            del annotated_frame
             all_detections.extend(tracked_detections)
 
-            # Periodic progress update
+            # Periodic progress update & memory garbage collection
             if frame_counter % 20 == 0:
+                import gc
+                gc.collect()
                 pct = min(0.75, 0.30 + (frame_counter / 200.0) * 0.45)
                 update_progress(pct, f"Processed {frame_counter} frames... (Vehicles: {len(vehicle_profiles)}, Collisions: {len(collision_detector.incidents)})")
 
@@ -573,6 +580,14 @@ def run_cctv_analysis(
                 artifact_type="ANNOTATED_VIDEO",
                 artifact_path=str(annotated_video_path)
             )
+            # Remove intermediate streamed frames to keep RAM & storage minimal
+            try:
+                import shutil
+                shutil.rmtree(temp_frames_dir, ignore_errors=True)
+            except Exception:
+                pass
+            import gc
+            gc.collect()
 
         # Step 16: Export CSV, JSON logs, vehicle registry, and summary dossier
         update_progress(0.92, "Exporting structured detection logs, vehicle registry, CSVs, and dossier...")
