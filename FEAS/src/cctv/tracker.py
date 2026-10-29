@@ -6,7 +6,8 @@ Documents spatial centroid trajectories and avoids claiming biometric continuity
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+import math
+from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from src.cctv.detector import Detection
@@ -32,6 +33,27 @@ class TrackSummary:
     last_keyframe: Optional[str] = None
     trajectory: List[Tuple[float, float, float]] = field(default_factory=list)  # (x, y, timestamp)
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "track_id": self.track_id,
+            "class": self.class_name,
+            "first_seen_timestamp": f"{self.first_seen_seconds:.2f}s",
+            "last_seen_timestamp": f"{self.last_seen_seconds:.2f}s",
+            "visible_duration": f"{self.visible_duration_seconds:.2f}s",
+            "first_frame_number": self.first_frame,
+            "last_frame_number": self.last_frame,
+            "maximum_confidence": round(self.max_confidence, 4),
+            "average_confidence": round(self.avg_confidence, 4),
+            "total_detections": self.total_detections,
+            "first_keyframe_path": self.first_keyframe,
+            "best_confidence_keyframe_path": self.best_keyframe,
+            "last_keyframe_path": self.last_keyframe,
+            "centroid_movement_path": [
+                {"x": round(pt[0], 1), "y": round(pt[1], 1), "t": round(pt[2], 2)}
+                for pt in self.trajectory
+            ]
+        }
+
 
 class CCTVTracker:
     """Multi-object tracker assigning readable, class-scoped identifiers."""
@@ -53,9 +75,10 @@ class CCTVTracker:
 
     def _generate_track_id(self, class_name: str) -> str:
         """Assign sequential stable human-readable ID like 'person_01', 'car_01'."""
-        count = self.class_counters.get(class_name, 0) + 1
-        self.class_counters[class_name] = count
-        return f"{class_name}_{count:02d}"
+        clean_cls = "auto" if class_name in ("auto", "auto_rickshaw") else class_name
+        count = self.class_counters.get(clean_cls, 0) + 1
+        self.class_counters[clean_cls] = count
+        return f"{clean_cls}_{count:02d}"
 
     @staticmethod
     def _calculate_iou(b1: Tuple[float, float, float, float], b2: Tuple[float, float, float, float]) -> float:
@@ -77,6 +100,53 @@ class CCTVTracker:
         union = area_a + area_b - intersection
 
         return (intersection / union) if union > 0 else 0.0
+
+    @staticmethod
+    def _calculate_spatial_affinity(
+        b1: Tuple[float, float, float, float],
+        c1: Tuple[float, float],
+        b2: Tuple[float, float, float, float],
+        c2: Tuple[float, float],
+        max_dist_px: float = 240.0
+    ) -> float:
+        """
+        Combines Intersection-over-Union (IoU) with normalized Centroid Euclidean Distance.
+        Guarantees reliable multi-object tracking across lower frame-rates (e.g. 1 FPS)
+        where moving pedestrians move faster than pure IoU overlap.
+        """
+        # 1. IoU score
+        x1_a, y1_a, x2_a, y2_a = b1
+        x1_b, y1_b, x2_b, y2_b = b2
+        x_left = max(x1_a, x1_b)
+        y_top = max(y1_a, y1_b)
+        x_right = min(x2_a, x2_b)
+        y_bottom = min(y2_a, y2_b)
+        iou = 0.0
+        if x_right > x_left and y_bottom > y_top:
+            intersection = (x_right - x_left) * (y_bottom - y_top)
+            area_a = max(0.0, (x2_a - x1_a) * (y2_a - y1_a))
+            area_b = max(0.0, (x2_b - x1_b) * (y2_b - y1_b))
+            union = area_a + area_b - intersection
+            iou = (intersection / union) if union > 0 else 0.0
+
+        # 2. Centroid distance score
+        dx = c1[0] - c2[0]
+        dy = c1[1] - c2[1]
+        dist = math.sqrt(dx * dx + dy * dy)
+        if dist > max_dist_px:
+            dist_score = 0.0
+        else:
+            # Area/scale consistency check
+            area_a = max(1.0, (x2_a - x1_a) * (y2_a - y1_a))
+            area_b = max(1.0, (x2_b - x1_b) * (y2_b - y1_b))
+            scale_ratio = area_a / area_b if area_a > area_b else area_b / area_a
+            if scale_ratio > 3.0:
+                dist_score = 0.0
+            else:
+                dist_score = max(0.0, 1.0 - (dist / max_dist_px))
+
+        # Return best matching metric
+        return max(iou, dist_score * 0.75)
 
     def update(
         self,
@@ -101,28 +171,43 @@ class CCTVTracker:
         assigned_det_indices = set()
         assigned_track_ids = set()
 
-        # Match detections to active tracks of identical class by highest IoU
+        # Match detections to active tracks of identical class by spatial affinity (IoU + Centroid proximity)
         for tid, tstate in self.active_tracks.items():
-            best_iou = 0.0
+            best_score = 0.0
             best_det_idx = -1
+
+            track_box = (tstate["x1"], tstate["y1"], tstate["x2"], tstate["y2"])
+            track_centroid = (tstate["centroid_x"], tstate["centroid_y"])
 
             for idx, det in enumerate(detections):
                 if idx in assigned_det_indices:
                     continue
                 if det.class_name != tstate["class_name"]:
-                    continue
+                    veh_group = {"auto", "auto_rickshaw", "truck", "car"}
+                    animal_group = {"dog", "cat", "cow", "horse", "sheep", "bird", "elephant"}
+                    is_veh_compat = (det.class_name in veh_group and tstate["class_name"] in veh_group)
+                    is_animal_compat = (det.class_name in animal_group and tstate["class_name"] in animal_group)
+                    if not (is_veh_compat or is_animal_compat):
+                        continue
 
-                track_box = (tstate["x1"], tstate["y1"], tstate["x2"], tstate["y2"])
                 det_box = (det.x1, det.y1, det.x2, det.y2)
-                iou = self._calculate_iou(track_box, det_box)
+                det_centroid = (det.centroid_x, det.centroid_y)
+                score = self._calculate_spatial_affinity(track_box, track_centroid, det_box, det_centroid)
 
-                if iou > best_iou:
-                    best_iou = iou
+                if score > best_score:
+                    best_score = score
                     best_det_idx = idx
 
-            if best_iou >= self.iou_threshold and best_det_idx != -1:
+            # Spatial affinity threshold (accepts centroid continuity when fast movement lowers IoU)
+            if best_score >= 0.20 and best_det_idx != -1:
                 det = detections[best_det_idx]
+                # Maintain track's established auto or animal class if matched
+                if tstate["class_name"] in ("auto", "auto_rickshaw"):
+                    det.class_name = tstate["class_name"]
+                elif tstate["class_name"] in {"dog", "cat", "cow", "horse", "sheep"}:
+                    det.class_name = tstate["class_name"]
                 det.track_id = tid
+                det.track_number = tstate.get("track_number", 0)
                 assigned_det_indices.add(best_det_idx)
                 assigned_track_ids.add(tid)
 
@@ -147,10 +232,13 @@ class CCTVTracker:
         for idx, det in enumerate(detections):
             if idx not in assigned_det_indices:
                 new_tid = self._generate_track_id(det.class_name)
+                track_num = self.class_counters.get(det.class_name, 1)
                 det.track_id = new_tid
+                det.track_number = track_num
 
                 self.active_tracks[new_tid] = {
                     "track_id": new_tid,
+                    "track_number": track_num,
                     "class_name": det.class_name,
                     "camera_id": det.camera_id,
                     "evidence_id": det.evidence_id,
@@ -209,8 +297,22 @@ class CCTVTracker:
             )
             self.completed_tracks[tid] = summary
 
-    def finalize(self) -> Dict[str, TrackSummary]:
-        """Retire all remaining active tracks at end of video stream."""
+    def finalize(self, min_detections: int = 1) -> Dict[str, TrackSummary]:
+        """Retire all remaining active tracks at end of video stream.
+
+        Args:
+            min_detections: Minimum frame hits required to confirm a track in multi-frame video.
+                           If > 1, single-frame spurious spikes (duration 0.0s) are filtered out
+                           to maintain forensic data integrity and eliminate false positive noise.
+        """
         for tid in list(self.active_tracks.keys()):
             self._retire_track(tid)
-        return self.completed_tracks
+
+        if min_detections <= 1:
+            return self.completed_tracks
+
+        confirmed = {
+            tid: summary for tid, summary in self.completed_tracks.items()
+            if summary.total_detections >= min_detections or summary.visible_duration_seconds > 0.1
+        }
+        return confirmed

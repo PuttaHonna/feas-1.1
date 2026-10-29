@@ -1,0 +1,20 @@
+{
+  "safety_disclaimer": "RESEARCH ONLY: Experimental visual similarity retrieval. Similarity does not establish common source, firearm attribution, caliber, manufacturer, or legal conclusion.",
+  "approved_lab_benchmarks": [
+    {
+      "dataset_name": "NIST Ballistics Toolmark Research Database (NBTRD)",
+      "institution": "National Institute of Standards and Technology (NIST)",
+      "license": "Public Domain / US Government Open Data (Laboratory Research Benchmark)",
+      "data_type": "Controlled laboratory optical and confocal microscopy images of fired bullets and cartridge cases",
+      "prohibited_claims": [
+        "firearm attribution",
+        "bullet caliber determination",
+        "manufacturer identification",
+        "rifling pattern conclusion",
+        "common source determination",
+        "criminal or investigative linkage"
+      ],
+      "objective": "Top-K visual similarity retrieval for reference study, subject to qualified human physical examiner verification."
+    }
+  ]
+}

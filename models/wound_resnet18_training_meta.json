@@ -1,0 +1,52 @@
+{
+  "model_architecture": "resnet18",
+  "best_epoch": 3,
+  "best_macro_f1": 0.0833,
+  "checkpoint_path": "C:\\Users\\user\\projects\\FEAS 2.0 (2)\\FEAS 2.0\\models\\wound_resnet18_best.pt",
+  "duration_seconds": 18.05,
+  "classes": [
+    "abrasion",
+    "bruise/contusion",
+    "laceration",
+    "incision",
+    "puncture",
+    "burn",
+    "no visible wound",
+    "benign_lesion",
+    "nevus",
+    "melanoma",
+    "keratosis",
+    "carcinoma"
+  ],
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 1.5788,
+      "train_macro_f1": 0.0728,
+      "val_loss": 2.0212,
+      "val_macro_f1": 0.0379
+    },
+    {
+      "epoch": 2,
+      "train_loss": 1.1303,
+      "train_macro_f1": 0.0827,
+      "val_loss": 1.5533,
+      "val_macro_f1": 0.069
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.7676,
+      "train_macro_f1": 0.0833,
+      "val_loss": 1.0162,
+      "val_macro_f1": 0.0833
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.482,
+      "train_macro_f1": 0.0833,
+      "val_loss": 0.6175,
+      "val_macro_f1": 0.0833
+    }
+  ],
+  "safety_disclaimer": "Experimental visual-category prediction. This output is not a diagnosis and must not be used for medical, legal, or forensic decisions."
+}

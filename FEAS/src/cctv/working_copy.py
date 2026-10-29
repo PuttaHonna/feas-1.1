@@ -15,7 +15,9 @@ from src.cctv.integrity import calculate_file_sha256, verify_sha256
 def create_verified_working_copy(
     original_path: Path | str,
     working_copies_dir: Path | str,
-    unique_prefix: str = ""
+    unique_prefix: str = "",
+    evidence_id: Optional[str] = None,
+    **kwargs
 ) -> Tuple[Path, str]:
     """Create an exact, byte-for-byte working copy of the original video and verify hash match.
 
@@ -34,7 +36,8 @@ def create_verified_working_copy(
     dest_dir = Path(working_copies_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
 
-    prefix = f"{unique_prefix}_" if unique_prefix else "work_"
+    pfx = evidence_id or unique_prefix
+    prefix = f"{pfx}_" if pfx else "work_"
     filename = f"{prefix}{orig.name}"
     working_copy_path = dest_dir / filename
 

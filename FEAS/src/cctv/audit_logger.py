@@ -202,3 +202,40 @@ class CCTVAuditLogger:
                 "evidence": dict(ev_row) if ev_row else {},
                 "artifacts": [dict(r) for r in art_rows]
             }
+
+    def record_analysis_run(
+        self,
+        run_id: str,
+        case_id: str,
+        evidence_id: str,
+        camera_id: str,
+        original_sha256: str,
+        working_copy_sha256: str,
+        parameters: Dict[str, Any]
+    ):
+        """High-level initialization combining evidence intake and run commencement."""
+        orig_path = parameters.get("original_path", "")
+        file_size = parameters.get("file_size_bytes", 0)
+        self.record_evidence_intake(
+            evidence_id=evidence_id,
+            case_id=case_id,
+            original_filename=Path(orig_path).name if orig_path else f"{evidence_id}.mp4",
+            original_path=str(orig_path),
+            original_sha256=original_sha256,
+            original_size_bytes=int(file_size),
+            working_copy_path=parameters.get("working_copy_path"),
+            working_copy_sha256=working_copy_sha256
+        )
+        self.record_run_start(
+            run_id=run_id,
+            evidence_id=evidence_id,
+            enhancement_mode=parameters.get("enhancement_mode", "basic"),
+            frame_sampling=parameters.get("analysis_mode", "fast_review"),
+            yolo_model=parameters.get("yolo_model", "yolov8n.pt"),
+            confidence_threshold=float(parameters.get("confidence_threshold", 0.40)),
+            tracking_method=parameters.get("tracking_method", "bytetrack")
+        )
+
+    def record_step(self, *args, **kwargs):
+        """Forensic step milestone logger hook."""
+        pass

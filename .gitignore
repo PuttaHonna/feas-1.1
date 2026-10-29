@@ -29,6 +29,8 @@ weights/
 models/*.pt
 
 # Forensic Evidence, Temporary Files & Generated Outputs
+data/
+**/data/
 evidence_store/
 **/evidence_store/
 storage/
@@ -45,6 +47,21 @@ exports/
 runs/
 *.avi
 *.mp4
+*.mkv
+*.part
+*.db
+*.db-shm
+*.db-wal
+dog_crop.jpg
+
+# Firebase & Cloud Secrets
+*service-account*.json
+.firebase/
+.firebaserc
+.env
+.env.*
+!.env.example
+!.env.firebase.example
 
 # Node & Frontend Build Artifacts
 node_modules/

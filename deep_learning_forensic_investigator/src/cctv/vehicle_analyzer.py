@@ -181,6 +181,9 @@ class VehicleForensicAnalyzer:
         """
         aspect_ratio = bbox_w / max(1.0, bbox_h)
 
+        if class_name in ("auto", "auto_rickshaw"):
+            return "Auto-Rickshaw", "Auto-Rickshaw / Three-Wheeler (Bajaj / TVS / Piaggio Profile)"
+
         if class_name == "motorcycle":
             return "Two-Wheeler", "Motorcycle / Scooter (Advisory Profile)"
 
@@ -191,7 +194,10 @@ class VehicleForensicAnalyzer:
                 return "Minibus / Van", "Urban Passenger Van / Minibus (Advisory Profile)"
 
         if class_name == "truck":
-            if bbox_w * bbox_h > 150000 or aspect_ratio > 2.2:
+            # Safety fallback: if detected as truck but has narrow/tall auto-rickshaw aspect ratio
+            if aspect_ratio <= 1.08 and bbox_w * bbox_h < 120000:
+                return "Auto-Rickshaw", "Auto-Rickshaw / Three-Wheeler (Bajaj / TVS / Piaggio Profile)"
+            elif bbox_w * bbox_h > 150000 or aspect_ratio > 2.2:
                 return "Heavy Commercial Truck", "Hauler / Semi-Truck (Advisory Profile)"
             else:
                 return "Pickup / Light Truck", "Pickup Truck (Advisory Profile)"

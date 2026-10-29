@@ -1,0 +1,47 @@
+# Deep Learning Forensics Investigator — Production Container
+FROM python:3.11-slim
+
+# Avoid prompts during apt installs
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV KMP_DUPLICATE_LIB_OK=TRUE
+
+# Install OS libraries for OpenCV and ReportLab
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    ffmpeg \
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    sqlite3 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy dependency definition
+COPY requirements-forensics.txt /app/
+
+# Install dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements-forensics.txt
+
+# Copy source code and tests
+COPY src /app/src
+COPY tests /app/tests
+COPY data /app/data
+COPY README.md /app/
+
+# Create read-only vault and working-copy directories
+RUN mkdir -p /app/data/evidence_vault /app/data/working_copies /app/data/artifacts
+
+EXPOSE 8000 8501
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Default launch command: runs FastAPI on port 8000 and Streamlit on port 8501
+CMD ["sh", "-c", "uvicorn src.api.main:app --host 0.0.0.0 --port 8000 & streamlit run src/app/streamlit_app.py --server.port 8501 --server.address 0.0.0.0"]

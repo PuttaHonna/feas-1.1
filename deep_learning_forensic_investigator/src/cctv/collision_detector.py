@@ -22,7 +22,7 @@ CRASH_DISCLAIMER: str = (
     "or court admissibility. Must be verified by a qualified collision reconstruction specialist."
 )
 
-VEHICLE_CLASSES = {"car", "motorcycle", "bus", "truck"}
+VEHICLE_CLASSES = {"car", "motorcycle", "bus", "truck", "auto", "auto_rickshaw"}
 
 
 @dataclass

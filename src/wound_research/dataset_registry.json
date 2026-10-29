@@ -1,0 +1,30 @@
+{
+  "safety_disclaimer": "RESEARCH ONLY: This registry and model are strictly for educational and scientific computer vision research. It is not a medical device, diagnostic aid, triage tool, or forensic pathology instrument.",
+  "approved_research_datasets": [
+    {
+      "dataset_id": "WOUND_BENCHMARK_2023",
+      "name": "Consented Clinical Wound Classification Research Dataset",
+      "license": "Research Use Only Agreement (Consented Institutional Ethics Protocol)",
+      "classes": [
+        "abrasion",
+        "bruise/contusion",
+        "laceration",
+        "incision",
+        "puncture",
+        "burn",
+        "no visible wound"
+      ],
+      "prohibited_inferences": [
+        "gunshot determination",
+        "stab determination",
+        "wound age estimation",
+        "severity estimation",
+        "body-location inference",
+        "cause-of-injury inference",
+        "medical treatment recommendation",
+        "legal or forensic conclusion"
+      ],
+      "splitting_policy": "Patient/subject-level grouping. All images belonging to an individual subject must be grouped entirely within one split (train, val, or test) to eliminate patient-level feature leakage."
+    }
+  ]
+}

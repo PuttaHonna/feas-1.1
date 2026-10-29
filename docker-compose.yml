@@ -1,0 +1,82 @@
+# ====================================================================
+# FEAS 2.0 - Universal Cross-Platform Docker Compose
+# Works on Windows (Docker Desktop), macOS (Apple Silicon & Intel),
+# and Linux (Docker Engine).
+# ====================================================================
+
+services:
+  feas-all:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: feas-suite:latest
+    container_name: feas-suite-all
+    restart: unless-stopped
+    ports:
+      - "8000:8000"   # FastAPI REST Engine & Swagger Documentation
+      - "8501:8501"   # FEAS Forensic Workstation UI
+      - "8502:8502"   # Deep Learning Forensic Investigator UI
+    volumes:
+      - ./data:/app/data
+      - ./FEAS/storage:/app/FEAS/storage
+      - ./FEAS/reports:/app/FEAS/reports
+      - ./FEAS/temp:/app/FEAS/temp
+    environment:
+      - PYTHONUNBUFFERED=1
+      - KMP_DUPLICATE_LIB_OK=TRUE
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Dedicated Individual Service Profiles (Optional: run specific component)
+  feas-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: feas-suite:latest
+    container_name: feas-api-service
+    restart: unless-stopped
+    command: ["python", "run.py", "api"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./FEAS/storage:/app/FEAS/storage
+      - ./FEAS/reports:/app/FEAS/reports
+    profiles:
+      - modular
+
+  feas-workstation:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: feas-suite:latest
+    container_name: feas-workstation-service
+    restart: unless-stopped
+    command: ["python", "run.py", "workstation"]
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+      - ./FEAS/storage:/app/FEAS/storage
+      - ./FEAS/reports:/app/FEAS/reports
+    profiles:
+      - modular
+
+  feas-investigator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: feas-suite:latest
+    container_name: feas-investigator-service
+    restart: unless-stopped
+    command: ["python", "run.py", "investigator"]
+    ports:
+      - "8502:8502"
+    volumes:
+      - ./data:/app/data
+    profiles:
+      - modular

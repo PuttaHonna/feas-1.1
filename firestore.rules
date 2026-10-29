@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global audit trail is append-only for court-admissible chain of custody
+    match /global_audit_trail/{eventId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if false; // Forensic tamper-proof: NEVER modify or delete
+    }
+
+    // Case records & evidence metadata
+    match /cases/{caseId} {
+      allow read, write: if request.auth != null;
+
+      // Case-level audit trail: strictly append-only
+      match /audit_trail/{auditId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null;
+        allow update, delete: if false;
+      }
+    }
+  }
+}

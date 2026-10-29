@@ -22,19 +22,19 @@ export default function SingleEvidenceView({ examiner = 'Special Agent Forensic 
     try {
       // Create simulated or actual multipart upload
       const formData = new FormData();
-      // Fetch sample from storage/temp if accessible, or create dummy file with proper filename
-      const response = await fetch(`/storage/${filename}`);
-      let blob;
-      if (response.ok) {
-        blob = await response.blob();
-      } else {
-        // Fallback placeholder blob with matching extension
-        blob = new Blob([`FEAS Evidentiary Bitstream for ${filename}`], { type: 'application/octet-stream' });
+      // Fetch sample from public samples or storage
+      let response = await fetch(`/samples/${filename}`);
+      if (!response.ok) {
+        response = await fetch(`/storage/${filename}`);
       }
+      if (!response.ok) {
+        throw new Error(`Sample file '${filename}' could not be loaded from server.`);
+      }
+      const blob = await response.blob();
 
       formData.append('file', blob, filename);
       formData.append('investigator_name', examiner);
-      formData.append('operator_notes', `Quick-load forensic intake of ${filename}`);
+      formData.append('operator_notes', `Investigator intake upload of ${filename}`);
 
       const apiRes = await fetch('/api/v1/analyze', {
         method: 'POST',
@@ -48,9 +48,8 @@ export default function SingleEvidenceView({ examiner = 'Special Agent Forensic 
       const data = await apiRes.json();
       setResults(data);
     } catch (err) {
-      console.warn('API fetch error, generating simulated comprehensive forensic data:', err);
-      // Generate rich fallback analysis data so user has immediate high graphics experience
-      simulateForensicResults(filename, fixtureType);
+      console.error('Evidence intake error:', err);
+      alert(`Forensic analysis error: ${err.message}. Ensure backend is active.`);
     } finally {
       setIsAnalyzing(false);
       setProgressMsg('');
@@ -76,65 +75,16 @@ export default function SingleEvidenceView({ examiner = 'Special Agent Forensic 
         body: formData,
       });
 
-      if (!apiRes.ok) throw new Error('Analysis failed');
+      if (!apiRes.ok) throw new Error(`Analysis failed with status ${apiRes.status}`);
       const data = await apiRes.json();
       setResults(data);
     } catch (err) {
-      console.warn('Upload error, generating simulated data:', err);
-      simulateForensicResults(file.name, 'custom');
+      console.error('Upload error:', err);
+      alert(`Evidence analysis error: ${err.message}`);
     } finally {
       setIsAnalyzing(false);
       setProgressMsg('');
     }
-  };
-
-  const simulateForensicResults = (filename, type) => {
-    const isTampered = type === 'tampered' || filename.includes('tampered');
-    const isDeepfake = type === 'deepfake' || filename.includes('deepfake');
-    const isAudio = type === 'audio' || filename.includes('audio') || filename.endsWith('.wav');
-    const isFace = type === 'cctv' || filename.includes('cctv') || filename.includes('face');
-
-    setResults({
-      case_id: `CASE-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
-      input_sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-      verdict: isTampered || isDeepfake || isAudio ? 'TAMPERED / INTEGRITY BREACH DETECTED' : 'MEDIA AUTHENTIC / EVIDENCE SECURE',
-      is_video: filename.endsWith('.mp4') || filename.endsWith('.mkv'),
-      pdf_path: '/reports/test_report.pdf',
-      pdf_sha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
-      forgery: {
-        is_tampered: isTampered,
-        tamper_score: isTampered ? 0.942 : 0.045,
-        bboxes: isTampered ? [{ x1: 142, y1: 88, x2: 320, y2: 240, confidence: 0.94, label: 'Spliced Inpainting' }] : [],
-        ela_metrics: { mean_error: 24.5, std_error: 12.2, compression_ratio: 0.95 },
-      },
-      deepfake: {
-        is_deepfake: isDeepfake,
-        deepfake_score: isDeepfake ? 0.912 : 0.082,
-        model_attribution: isDeepfake ? 'FaceSwap / Poisson Splicing' : 'Organic Sensor Capture',
-        artifact_signals: isDeepfake ? ['Periodic 2D GAN Lattice in High-Freq Band', 'Gradient Seam Boundary Inconsistency'] : [],
-        fft_metrics: { periodic_peaks_count: isDeepfake ? 14 : 0, spectral_entropy: 0.84 },
-      },
-      audio: {
-        has_audio: isAudio,
-        duration_seconds: 4.25,
-        sample_rate_hz: 44100,
-        snr_db: 26.4,
-        pitch_jitter: isAudio ? 0.008 : 0.024,
-        synthetic_voice_score: isAudio ? 0.89 : 0.08,
-        is_synthetic_voice: isAudio,
-      },
-      face: {
-        face_detected: isFace || isDeepfake,
-        top_match: { name: 'Suspect-A (Marcus Vance)', similarity: 0.914, distance: 0.186, suspect_id: 'SUSP-001' },
-        matches: [
-          { name: 'Suspect-A (Marcus Vance)', similarity: 0.914, distance: 0.186, suspect_id: 'SUSP-001', notes: 'Prior convictions in digital wire fraud.' },
-          { name: 'Person-B (Dmitri Sokolov)', similarity: 0.442, distance: 0.558, suspect_id: 'SUSP-002', notes: 'Known associate.' },
-        ],
-        embedding: Array.from({ length: 64 }, () => (Math.random() - 0.5) * 0.4),
-      },
-      wound: { wound_detected: type === 'wound', wound_type: 'Gunshot Entry / Contusion', severity: 'Severe', wound_type_confidence: 0.92 },
-      ballistics: { striae_detected: type === 'bullet', caliber: '9x19mm Parabellum', rifling: '6-Groove Right', manufacturer: 'Glock Inc.', caliber_confidence: 0.96 },
-    });
   };
 
   const forgery = results?.forgery || {};

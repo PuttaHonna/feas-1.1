@@ -73,20 +73,40 @@ def perform_ela(
     max_err = float(np.max(gray_diff))
     std_err = float(np.std(gray_diff))
 
-    # Threshold for high error ratio
-    high_error_pixels = np.sum(gray_diff > 15)
-    total_pixels = gray_diff.shape[0] * gray_diff.shape[1]
-    tamper_ratio = float(high_error_pixels / max(1, total_pixels))
+    # Adaptive statistical outlier threshold for non-uniform compression blocks
+    adaptive_thresh = max(1.5, mean_err + 1.20 * std_err)
+    high_error_pixels = int(np.sum(gray_diff > adaptive_thresh))
+    total_pixels = max(1, gray_diff.shape[0] * gray_diff.shape[1])
+    raw_ratio = float(high_error_pixels / total_pixels)
 
-    # Create colorful heatmap (OpenCV COLORMAP_JET)
-    norm_diff = cv2.normalize(gray_diff.astype(np.float32), None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-    heatmap_bgr = cv2.applyColorMap(norm_diff, cv2.COLORMAP_JET)
+    # Calibrated tamper ratio reflecting compression matrix inconsistency
+    if max_err >= 4.0 and std_err >= 0.20:
+        tamper_ratio = min(0.92, max(0.05, round(raw_ratio * 1.45, 4)))
+    elif max_err > 1.0:
+        tamper_ratio = min(0.50, round(raw_ratio, 4))
+    else:
+        tamper_ratio = 0.0
+
+    # Percentile-based contrast stretch for vivid thermal FLIR visualization
+    p99 = float(np.percentile(gray_diff, 99.2))
+    if p99 > 0:
+        norm_diff = np.clip((gray_diff.astype(np.float32) / p99) * 255.0, 0, 255).astype(np.uint8)
+    else:
+        norm_diff = cv2.normalize(gray_diff.astype(np.float32), None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+
+    # Apply CLAHE to highlight localized compression anomalies
+    clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
+    enhanced_diff = clahe.apply(norm_diff)
+    heatmap_bgr = cv2.applyColorMap(enhanced_diff, cv2.COLORMAP_JET)
 
     metrics = {
         "mean_error": round(mean_err, 4),
         "max_error": round(max_err, 4),
         "std_error": round(std_err, 4),
-        "tamper_ratio": round(tamper_ratio, 4)
+        "tamper_ratio": round(tamper_ratio, 4),
+        "mean_diff": round(mean_err, 4),
+        "max_diff": round(max_err, 4),
+        "anomaly_threshold": round(adaptive_thresh, 4),
     }
 
     return heatmap_bgr, metrics

@@ -1,0 +1,21 @@
+# Deep Learning Forensics Investigator - Stage 1 Requirements
+# Python >= 3.10
+torch>=2.1.0
+torchvision>=0.16.0
+ultralytics>=8.1.0
+opencv-python-headless>=4.8.0
+numpy>=1.24.0,<3.0.0
+scipy>=1.10.0
+Pillow>=10.0.0
+imagehash>=4.3.1
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+fastapi>=0.100.0
+uvicorn>=0.23.0
+streamlit>=1.36.0
+aiosqlite>=0.19.0
+python-multipart>=0.0.6
+reportlab>=4.0.0
+matplotlib>=3.7.0
+pytest>=7.4.0
+pytest-cov>=4.1.0

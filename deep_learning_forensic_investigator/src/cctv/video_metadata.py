@@ -23,8 +23,8 @@ def _decode_fourcc(fourcc_val: float) -> str:
 
 def extract_technical_metadata(
     video_path: Path | str,
-    evidence_id: str,
-    case_id: str,
+    evidence_id: str = "EV-CCTV-01",
+    case_id: str = "CASE-2026-001",
     user_metadata: Optional[Dict[str, Any]] = None,
     precomputed_sha256: Optional[str] = None
 ) -> Dict[str, Any]:

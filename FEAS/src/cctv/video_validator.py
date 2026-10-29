@@ -21,6 +21,9 @@ class ValidationResult:
     file_size_bytes: int = 0
     extension: str = ""
 
+    def __iter__(self):
+        return iter((self.is_valid, self.error_message))
+
 
 def validate_cctv_video(
     file_path: Path | str,

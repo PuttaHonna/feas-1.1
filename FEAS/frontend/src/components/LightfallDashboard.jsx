@@ -19,7 +19,6 @@ import {
   Layers,
   ArrowRight,
   Database,
-  Maximize2,
   Zap
 } from 'lucide-react';
 
@@ -52,9 +51,6 @@ const COLOR_PRESETS = {
 };
 
 export default function LightfallDashboard({ onSelectModule, onViewModeChange }) {
-  // Mode toggle: 'dashboard' (Full Forensic Command Deck) | 'pure' (Exact 600px React Bits Canvas)
-  const [displayMode, setDisplayMode] = useState('dashboard');
-
   // Lightfall Configuration State (matching React Bits defaults)
   const [selectedPreset, setSelectedPreset] = useState('reactBits');
   const [speed, setSpeed] = useState(1.0);
@@ -143,30 +139,8 @@ export default function LightfallDashboard({ onSelectModule, onViewModeChange })
 
   return (
     <div className="lightfall-dashboard-container">
-      {/* View Switcher Bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Lightfall Mode:
-          </span>
-          <button
-            className={`ctrl-btn ${displayMode === 'dashboard' ? 'active' : ''}`}
-            onClick={() => setDisplayMode('dashboard')}
-            style={{ padding: '0.35rem 0.75rem' }}
-          >
-            <Shield size={13} />
-            <span>Forensic Command Deck</span>
-          </button>
-          <button
-            className={`ctrl-btn ${displayMode === 'pure' ? 'active' : ''}`}
-            onClick={() => setDisplayMode('pure')}
-            style={{ padding: '0.35rem 0.75rem' }}
-          >
-            <Maximize2 size={13} />
-            <span>Pure 600px Showcase</span>
-          </button>
-        </div>
-
+      {/* Controls Bar */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div className="hero-controls-bar">
           <button
             className={`ctrl-btn ${showControls ? 'active' : ''}`}
@@ -306,65 +280,8 @@ export default function LightfallDashboard({ onSelectModule, onViewModeChange })
         </div>
       )}
 
-      {/* Pure 600px Mode: Direct Exact Usage Example */}
-      {displayMode === 'pure' ? (
-        <div
-          style={{
-            width: '100%',
-            height: '600px',
-            position: 'relative',
-            borderRadius: '16px',
-            overflow: 'hidden',
-            border: '1px solid rgba(56, 189, 248, 0.3)',
-            boxShadow: '0 12px 40px rgba(0, 0, 0, 0.7)'
-          }}
-        >
-          <Lightfall
-            colors={activeColors}
-            backgroundColor={activeBg}
-            speed={speed}
-            streakCount={streakCount}
-            streakWidth={streakWidth}
-            streakLength={streakLength}
-            glow={glow}
-            density={density}
-            twinkle={twinkle}
-            zoom={zoom}
-            backgroundGlow={backgroundGlow}
-            opacity={opacity}
-            mouseInteraction={mouseInteraction}
-            mouseStrength={mouseStrength}
-            mouseRadius={mouseRadius}
-            paused={isPaused}
-          />
-
-          <div
-            style={{
-              position: 'absolute',
-              bottom: '1.5rem',
-              left: '1.5rem',
-              background: 'rgba(11, 17, 28, 0.75)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              borderRadius: '10px',
-              padding: '0.75rem 1.25rem',
-              backdropFilter: 'blur(10px)',
-              color: '#ffffff',
-              fontSize: '0.85rem'
-            }}
-          >
-            <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <Zap size={14} color="#38bdf8" />
-              <span>React Bits &bull; Lightfall Canvas (600px)</span>
-            </div>
-            <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>
-              Interact with your cursor to cast dynamic light flares across falling streaks.
-            </div>
-          </div>
-        </div>
-      ) : (
-        /* Forensic Command Deck Mode */
-        <>
-          <section className="lightfall-hero-wrapper">
+      {/* Forensic Command Deck Hero & Modules */}
+      <section className="lightfall-hero-wrapper">
             <div className="lightfall-canvas-layer">
               <Lightfall
                 colors={activeColors}
@@ -662,9 +579,7 @@ export default function LightfallDashboard({ onSelectModule, onViewModeChange })
                 </div>
               </div>
             </div>
-          </section>
-        </>
-      )}
+      </section>
     </div>
   );
 }

@@ -1,0 +1,9 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Only authenticated forensic examiners can read and write evidence and reports
+    match /cases/{caseId}/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

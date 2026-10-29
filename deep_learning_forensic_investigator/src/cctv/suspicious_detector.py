@@ -23,7 +23,7 @@ SUSPICIOUS_DISCLAIMER: str = (
     "criminal intent or legal violation. Requires certified human analyst review."
 )
 
-VEHICLE_CLASSES = {"car", "motorcycle", "bus", "truck"}
+VEHICLE_CLASSES = {"car", "motorcycle", "bus", "truck", "auto", "auto_rickshaw"}
 
 
 @dataclass

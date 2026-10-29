@@ -11,7 +11,8 @@ import {
   Box,
   Sliders,
   Play,
-  Pause
+  Pause,
+  RefreshCw
 } from 'lucide-react';
 
 export default function Forensic3DLab({ initialMode = 'architecture', onSelectModule }) {
@@ -702,6 +703,14 @@ export default function Forensic3DLab({ initialMode = 'architecture', onSelectMo
     controlsRef.current.update();
   };
 
+  const resetLab = () => {
+    setSelectedNode(null);
+    setAutoRotate(true);
+    setWireframe(false);
+    setElevationLevel(1.4);
+    setCameraPreset('iso');
+  };
+
   return (
     <div className="forensic-3d-lab-wrapper">
       {/* 3D Viewport Navigation Header */}
@@ -779,6 +788,7 @@ export default function Forensic3DLab({ initialMode = 'architecture', onSelectMo
             <button onClick={() => setCameraPreset('iso')} className="hud-ctrl-btn-mini" title="Isometric Preset">ISO</button>
             <button onClick={() => setCameraPreset('front')} className="hud-ctrl-btn-mini" title="Front Preset">FRONT</button>
             <button onClick={() => setCameraPreset('top')} className="hud-ctrl-btn-mini" title="Top-Down Preset">TOP</button>
+            <button onClick={resetLab} className="hud-ctrl-btn-mini" style={{ color: '#f87171' }} title="Reset 3D Lab Scene">RESET</button>
           </div>
         </div>
 

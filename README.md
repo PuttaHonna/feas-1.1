@@ -22,37 +22,39 @@ This repository contains a full-stack forensic engineering and computer vision p
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Universal Cross-Platform Quick Start
 
-### 1. Environment Setup
-```powershell
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r FEAS/requirements.txt
-pip install -r deep_learning_forensic_investigator/requirements.txt
-```
+FEAS 2.0 provides cross-platform launchers that automatically configure and run on **Windows, macOS, Linux, and Docker**:
 
-### 2. Running Services
+### 1. Unified Launchers (Recommended)
 
-#### Deep Learning Forensic Investigator UI (Port 8502)
-```powershell
-cd deep_learning_forensic_investigator
-streamlit run app.py --server.port 8502
-```
+| Operating System | Native Command | Python Command |
+|---|---|---|
+| **Windows (CMD / PowerShell)** | `run.bat` or `.\run.ps1` | `python run.py` |
+| **Linux / macOS** | `./run.sh` | `python3 run.py` |
+| **Docker (Any OS)** | `docker compose up` | `python run.py docker` |
 
-#### FEAS Forensic Workstation UI (Port 8501)
-```powershell
-cd FEAS
-streamlit run src/ui/app.py --server.port 8501
-```
+### 2. Available Run Commands
 
-#### FEAS FastAPI Backend (Port 8000)
-```powershell
-cd FEAS
-uvicorn src.main:app --host 127.0.0.1 --port 8000
+```bash
+# 1. Inspect platform, dependencies, and GPU/MPS acceleration
+python run.py doctor
+
+# 2. Run all services simultaneously (API + Workstation + Investigator)
+python run.py all
+
+# 3. Or launch individual components:
+python run.py api           # FEAS FastAPI Backend (:8000)
+python run.py workstation   # FEAS Forensic Workstation UI (:8501)
+python run.py investigator  # Deep Learning Investigator UI (:8502)
+python run.py frontend      # Forensic 3D React Dashboard
+
+# 4. Run automated test suite across all modules (94+ tests)
+python run.py test
 ```
 
 Interactive API documentation available at: `http://127.0.0.1:8000/docs`
+For complete OS-specific details (Ubuntu, Apple Silicon Metal, Docker), see [PLATFORMS.md](file:///c:/Users/user/projects/FEAS%202.0%20(2)/FEAS%202.0/PLATFORMS.md).
 
 ---
 

@@ -390,3 +390,24 @@ def test_vehicle_artifacts_export(temp_dir):
     assert "Vehicle Forensic Registry" in content
     assert "KA01MJ1234" in content
     assert "CRASH-0001" in content
+
+
+# 16. Auto-Rickshaw Reclassification and Video Pacing
+def test_auto_rickshaw_reclassification_and_pacing(temp_dir):
+    # Auto-Rickshaw Body Model classification
+    auto_body, auto_model = VehicleForensicAnalyzer.classify_body_and_model("auto", 150, 180)
+    assert auto_body == "Auto-Rickshaw"
+    assert "Three-Wheeler" in auto_model
+
+    # Truck fallback with narrow aspect ratio (ar <= 1.08) -> Auto-Rickshaw
+    fallback_body, fallback_model = VehicleForensicAnalyzer.classify_body_and_model("truck", 170, 210)
+    assert fallback_body == "Auto-Rickshaw"
+
+    # Frame pacing duration test: 20 frames with target_duration=10.0 at fps=25.0
+    out_video = temp_dir / "test_pacing.mp4"
+    dummy_frames = [np.zeros((120, 160, 3), dtype=np.uint8) for _ in range(5)]
+    from src.cctv.annotated_video import generate_annotated_video
+    generate_annotated_video(dummy_frames, out_video, fps=25.0, target_duration=5.0)
+    assert out_video.exists()
+    assert out_video.stat().st_size > 0
+

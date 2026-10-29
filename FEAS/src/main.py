@@ -10,7 +10,8 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.api.routes import router as api_router
-from src.config import REPORTS_DIR, STORAGE_DIR, TEMP_DIR
+from src.api.firebase_routes import router as firebase_router
+from src.config import REPORTS_DIR, STORAGE_DIR, TEMP_DIR, RESULTS_DIR
 from src.db.audit import init_db
 
 
@@ -41,6 +42,7 @@ app.add_middleware(
 app.mount("/storage", StaticFiles(directory=str(STORAGE_DIR)), name="storage")
 app.mount("/reports", StaticFiles(directory=str(REPORTS_DIR)), name="reports")
 app.mount("/temp", StaticFiles(directory=str(TEMP_DIR)), name="temp")
+app.mount("/results", StaticFiles(directory=str(RESULTS_DIR)), name="results")
 
 # Mount High-Graphics Web Dashboard if built
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
@@ -53,6 +55,7 @@ if FRONTEND_DIST.exists():
 
 # Include API Router
 app.include_router(api_router)
+app.include_router(firebase_router)
 
 
 @app.get("/")

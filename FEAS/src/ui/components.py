@@ -594,8 +594,8 @@ def render_cctv_surveillance_matrix(
             unsafe_allow_html=True
         )
 
-    # Keyframe timeline scrubber if keyframes exist
-    if keyframes:
+    # Keyframe timeline scrubber if multiple keyframes exist
+    if keyframes and len(keyframes) > 1:
         st.markdown(
             f"""
             <div class="cctv-timeline-bar">
@@ -612,8 +612,8 @@ def render_cctv_surveillance_matrix(
         selected_kf_idx = st.slider(
             "Timeline Scrubber (Frame Position)",
             min_value=0,
-            max_value=max(0, len(keyframes) - 1),
-            value=current_idx,
+            max_value=len(keyframes) - 1,
+            value=min(current_idx, len(keyframes) - 1),
             step=1,
             key="kf_timeline_slider",
             label_visibility="collapsed"

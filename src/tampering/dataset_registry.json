@@ -1,0 +1,26 @@
+{
+  "active_dataset": "CASIA Image Tampering Dataset v2.0 (Expanded)",
+  "retrieval_date": "2026-10-15",
+  "statistics": {
+    "authentic_samples": 600,
+    "tampered_samples": 600,
+    "total_benchmark_samples": 1200
+  },
+  "datasets": [
+    {
+      "name": "CASIA Image Tampering Dataset v2.0 (Expanded)",
+      "source_url": "https://huggingface.co/datasets/ductai199x/image-manipulation-dataset-compilation",
+      "license": "Research and Educational Forensic Evaluation License",
+      "class_labels": [
+        "authentic",
+        "manipulated"
+      ],
+      "manipulation_types": [
+        "splicing",
+        "copy-move"
+      ],
+      "split_method": "Stratified 70/15/15 train/val/test split with SHA-256 and pHash duplicate elimination",
+      "quality_preservation": "Original EXIF and compression quantization preserved without destructive interpolation"
+    }
+  ]
+}

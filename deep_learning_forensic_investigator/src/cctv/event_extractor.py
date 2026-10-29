@@ -16,7 +16,7 @@ HUMAN_REVIEW_DISCLAIMER: str = (
     "Requires human analyst review; does not imply intent, guilt, or legal wrongdoing."
 )
 
-VEHICLE_CLASSES = {"car", "motorcycle", "bicycle", "bus", "truck"}
+VEHICLE_CLASSES = {"car", "motorcycle", "bicycle", "bus", "truck", "auto", "auto_rickshaw"}
 
 
 @dataclass
@@ -107,13 +107,13 @@ class CCTVEventExtractor:
         for det in detections:
             tid = det.track_id or "untracked"
 
-            # 1. Event: First detected in camera view
+            # 1. Event: Entered camera view (consolidated factual entrance)
             if tid not in self.first_detected_tracks and tid != "untracked":
                 self.first_detected_tracks.add(tid)
                 self.events.append(CCTVEvent(
                     event_id=self._next_event_id(),
                     event_type="OBJECT_ENTERED_VIEW",
-                    description=f"Object {tid} ({det.class_name}) entered camera view",
+                    description=f"{tid} entered camera view",
                     track_id=tid,
                     timestamp_seconds=timestamp_seconds,
                     timestamp_hms=timestamp_hms,
@@ -123,13 +123,13 @@ class CCTVEventExtractor:
                     related_keyframe_path=keyframe_path
                 ))
 
-            # 2. Event: New object class detected
+            # 2. Event: new object class detected
             if det.class_name not in self.seen_classes:
                 self.seen_classes.add(det.class_name)
                 self.events.append(CCTVEvent(
                     event_id=self._next_event_id(),
                     event_type="NEW_CLASS_DETECTED",
-                    description=f"New object class '{det.class_name}' observed in footage",
+                    description=f"new object class detected: {det.class_name}",
                     track_id=tid,
                     timestamp_seconds=timestamp_seconds,
                     timestamp_hms=timestamp_hms,
@@ -142,7 +142,7 @@ class CCTVEventExtractor:
             # Check co-occurrence
             if det.class_name == "person":
                 has_person = True
-            elif det.class_name in VEHICLE_CLASSES:
+            elif det.class_name in VEHICLE_CLASSES or det.class_name == "train":
                 has_vehicle = True
 
             # 3. Optional ROI Zone analysis
@@ -154,8 +154,8 @@ class CCTVEventExtractor:
                         self.track_roi_first_sec[tid] = timestamp_seconds
                         self.events.append(CCTVEvent(
                             event_id=self._next_event_id(),
-                            event_type="OBJECT_ENTERED_ROI",
-                            description=f"Object {tid} ({det.class_name}) entered configured ROI zone",
+                            event_type="ENTERED_ROI_ZONE",
+                            description="object entered configured ROI zone",
                             track_id=tid,
                             timestamp_seconds=timestamp_seconds,
                             timestamp_hms=timestamp_hms,
@@ -170,10 +170,10 @@ class CCTVEventExtractor:
                             self.roi_dwell_tracks.add(tid)
                             self.events.append(CCTVEvent(
                                 event_id=self._next_event_id(),
-                                event_type="OBJECT_ROI_DWELL",
+                                event_type="REMAINED_IN_ROI_ZONE",
                                 description=(
-                                    f"Object {tid} remained in ROI zone for more than "
-                                    f"{self.roi_dwell_threshold:.1f} seconds"
+                                    f"object remained in configured ROI zone for more than "
+                                    f"{int(self.roi_dwell_threshold)} seconds"
                                 ),
                                 track_id=tid,
                                 timestamp_seconds=timestamp_seconds,
@@ -183,8 +183,23 @@ class CCTVEventExtractor:
                                 camera_id=camera_id,
                                 related_keyframe_path=keyframe_path
                             ))
+                else:
+                    if tid in self.roi_entered_tracks:
+                        self.roi_entered_tracks.remove(tid)
+                        self.events.append(CCTVEvent(
+                            event_id=self._next_event_id(),
+                            event_type="EXITED_ROI_ZONE",
+                            description="object exited configured ROI zone",
+                            track_id=tid,
+                            timestamp_seconds=timestamp_seconds,
+                            timestamp_hms=timestamp_hms,
+                            frame_number=frame_number,
+                            confidence_summary=det.confidence,
+                            camera_id=camera_id,
+                            related_keyframe_path=keyframe_path
+                        ))
 
-        # 4. Event: Co-presence of person and vehicle
+        # 4. Event: person and vehicle visible in same frame
         if has_person and has_vehicle:
             # Throttle co-occurrence event to avoid spamming every frame
             co_id = f"co_{frame_number // 25}"
@@ -194,8 +209,8 @@ class CCTVEventExtractor:
                 self._seen_co_occurrences.add(co_id)
                 self.events.append(CCTVEvent(
                     event_id=self._next_event_id(),
-                    event_type="PERSON_VEHICLE_COOCCURRENCE",
-                    description="Person and vehicle simultaneously present in camera view",
+                    event_type="PERSON_VEHICLE_SAME_FRAME",
+                    description="person and vehicle visible in same frame",
                     track_id=None,
                     timestamp_seconds=timestamp_seconds,
                     timestamp_hms=timestamp_hms,
@@ -205,41 +220,55 @@ class CCTVEventExtractor:
                     related_keyframe_path=keyframe_path
                 ))
 
-    def evaluate_completed_tracks(self, tracks: Dict[str, TrackSummary]):
-        """Generate exit events and prolonged duration events from completed tracks."""
+    def filter_to_confirmed_tracks(self, confirmed_track_ids: Set[str]):
+        """Purge events associated with unconfirmed / spurious transient detections."""
+        self.events = [
+            ev for ev in self.events
+            if ev.track_id is None or ev.track_id in confirmed_track_ids
+        ]
+
+    def evaluate_completed_tracks(self, tracks: Dict[str, TrackSummary], total_frames: int = 0):
+        """Generate exit events and prolonged duration events from completed confirmed tracks."""
         for tid, t in tracks.items():
             # Prolonged visibility event
             if t.visible_duration_seconds >= self.dwell_threshold and tid not in self.prolonged_tracks:
                 self.prolonged_tracks.add(tid)
+                mins = int(t.last_seen_seconds // 60)
+                secs = int(t.last_seen_seconds % 60)
+                millis = int(round((t.last_seen_seconds - int(t.last_seen_seconds)) * 1000))
                 self.events.append(CCTVEvent(
                     event_id=self._next_event_id(),
-                    event_type="OBJECT_PROLONGED_PRESENCE",
-                    description=(
-                        f"Object {tid} ({t.class_name}) visible for {t.visible_duration_seconds:.1f}s "
-                        f"(threshold: {self.dwell_threshold:.1f}s)"
-                    ),
+                    event_type="VISIBLE_MORE_THAN_DURATION",
+                    description=f"{tid} visible for more than configurable duration",
                     track_id=tid,
                     timestamp_seconds=t.last_seen_seconds,
-                    timestamp_hms=f"{int(t.last_seen_seconds // 60):02d}:{int(t.last_seen_seconds % 60):02d}",
+                    timestamp_hms=f"{mins:02d}:{secs:02d}.{millis:03d}",
                     frame_number=t.last_frame,
                     confidence_summary=t.avg_confidence,
                     camera_id=t.camera_id,
                     related_keyframe_path=t.last_keyframe or t.best_keyframe
                 ))
 
-            # Exit event
-            self.events.append(CCTVEvent(
-                event_id=self._next_event_id(),
-                event_type="OBJECT_EXITED_VIEW",
-                description=f"Object {tid} ({t.class_name}) exited camera view",
-                track_id=tid,
-                timestamp_seconds=t.last_seen_seconds,
-                timestamp_hms=f"{int(t.last_seen_seconds // 60):02d}:{int(t.last_seen_seconds % 60):02d}",
-                frame_number=t.last_frame,
-                confidence_summary=t.avg_confidence,
-                camera_id=t.camera_id,
-                related_keyframe_path=t.last_keyframe
-            ))
+            # Exit event: Only emit if the track was genuinely tracked across >= 2 detections
+            # AND actually exited before the video stream ended (not merely visible when recording stopped)
+            is_multi_frame = total_frames > 2
+            exited_before_end = (t.last_frame < max(0, total_frames - 2)) if is_multi_frame else False
+            if t.total_detections >= 2 and exited_before_end:
+                mins = int(t.last_seen_seconds // 60)
+                secs = int(t.last_seen_seconds % 60)
+                millis = int(round((t.last_seen_seconds - int(t.last_seen_seconds)) * 1000))
+                self.events.append(CCTVEvent(
+                    event_id=self._next_event_id(),
+                    event_type="EXITED_CAMERA_VIEW",
+                    description=f"{tid} exited camera view",
+                    track_id=tid,
+                    timestamp_seconds=t.last_seen_seconds,
+                    timestamp_hms=f"{mins:02d}:{secs:02d}.{millis:03d}",
+                    frame_number=t.last_frame,
+                    confidence_summary=t.avg_confidence,
+                    camera_id=t.camera_id,
+                    related_keyframe_path=t.last_keyframe
+                ))
 
     def get_events(self) -> List[CCTVEvent]:
         """Return chronological list of extracted events."""

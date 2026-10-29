@@ -33,6 +33,7 @@ from src.db.audit import (
     init_db,
     list_cases_sync
 )
+from src.services.firebase_service import firebase_forensics
 from src.pipeline.ingestion import process_uploaded_media
 from src.reports.batch_report import build_batch_pdf
 from src.reports.pdf_generator import build_pdf
@@ -121,11 +122,12 @@ def main():
         )
 
     # Main Navigation Tabs
-    nav_single, nav_batch, nav_suspects, nav_cctv = st.tabs([
+    nav_single, nav_batch, nav_suspects, nav_cctv, nav_firebase = st.tabs([
         "🔍 Single Evidence Workstation",
         "📁 High-Throughput Batch Triage",
         "👥 Biometric Suspect Registry",
-        "📡 Live CCTV Surveillance Operations Center"
+        "📡 Live CCTV Surveillance Operations Center",
+        "☁️ Firebase Cloud Vault & Sync"
     ])
 
     # =========================================================================
@@ -738,11 +740,36 @@ def main():
             c_step = st.number_input("Frame Sampling Step", min_value=1, max_value=30, value=2, step=1, key="cctv_step") if c_mode_val == "full_analysis" else 1
 
             c_enh = st.selectbox(
-                "Deterministic Enhancement",
-                ["Basic (CLAHE + Contrast)", "Low Light (Gamma + Denoise + CLAHE)", "None (Raw working frames)"],
+                "CCTV Surveillance Enhancement",
+                [
+                    "Adaptive Smart (Degradation-Aware + Auto Fallback)",
+                    "LOL-v2 Deep Frame Enhancement (Paired Low-Light)",
+                    "SDSD Deep Video Enhancement (Multi-Frame & Anti-Flicker)",
+                    "REDS Video Super-Resolution (RealBasicVSR Experiment)",
+                    "Low Light (Gamma + Denoise + CLAHE)",
+                    "Basic (CLAHE + Contrast)",
+                    "None (Raw working frames)"
+                ],
                 key="cctv_enh"
             )
-            c_enh_val = "low_light" if "Low Light" in c_enh else ("none" if "None" in c_enh else "basic")
+            if "Adaptive Smart" in c_enh:
+                c_enh_val = "adaptive_smart"
+                st.info("🧠 **Degradation-Aware Smart Mode**: Diagnoses exact defect (darkness vs blur vs compression vs resolution), applies targeted correction only, and **automatically falls back to raw frame** if enhancement hurts detection confidence.")
+            elif "LOL-v2" in c_enh:
+                c_enh_val = "lol_v2"
+                st.info("💡 **LOL-v2 Frame Enhancement**: Trained on paired dark/normal images. Restores shadow detail. *Note: Frame-level training does not prevent video flicker.*")
+            elif "SDSD" in c_enh:
+                c_enh_val = "sdsd_temporal"
+                st.info("🎥 **SDSD Temporal Video Enhancement**: Multi-frame window ([t-1, t, t+1]) trained on dynamic surveillance scenes to eliminate inter-frame flicker.")
+            elif "REDS" in c_enh:
+                c_enh_val = "reds_sr"
+                st.warning("⚠️ **REDS/RealBasicVSR Super-Resolution**: Separate resolution-restoration experiment. Generated fine textures must NOT be presented as verified evidence.")
+            elif "Low Light" in c_enh:
+                c_enh_val = "low_light"
+            elif "None" in c_enh:
+                c_enh_val = "none"
+            else:
+                c_enh_val = "basic"
             c_conf = st.slider("Detection Confidence", min_value=0.10, max_value=0.90, value=0.40, step=0.05, key="cctv_conf")
 
             use_roi = st.checkbox("Configure Spatial ROI Zone (Optional)", value=False, key="feas_cctv_roi")
@@ -832,6 +859,17 @@ def main():
             st.markdown(f"- **Working Copy Hash (SHA-256):** `{c_res.get('working_copy_sha256')}`")
             if c_res.get('original_sha256') == c_res.get('working_copy_sha256'):
                 st.markdown('<div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 10px; color: #10b981; font-size: 13px;">✓ Working copy verified byte-for-byte identical to original evidence.</div>', unsafe_allow_html=True)
+
+            # Enhancement Proof of Benefit Audit
+            enh_audit = c_res.get("enhancement_utility_summary")
+            if enh_audit and enh_audit.get("total_audited", 0) > 0:
+                with st.expander("🛡️ Enhancement Forensic Proof-of-Benefit Audit (Quality Gate & Fallbacks)", expanded=True):
+                    ea1, ea2, ea3, ea4 = st.columns(4)
+                    ea1.metric("Frames Diagnosed", enh_audit.get("total_audited", 0))
+                    ea2.metric("Targeted Corrections", enh_audit.get("targeted_enhanced", 0))
+                    ea3.metric("Pristine Bypasses", enh_audit.get("bypassed_clean", 0))
+                    ea4.metric("Fallbacks Triggered", enh_audit.get("fallbacks_triggered", 0))
+                    st.caption("Forensic Integrity Policy: Unnecessary processing was bypassed. Frames where enhancement reduced detection confidence were automatically rolled back to raw working frames.")
 
             # Download Artifacts
             st.markdown("#### 📥 Exported Forensic Artifacts")
@@ -944,6 +982,139 @@ def main():
                         with k_cols[idx % len(k_cols)]:
                             st.image(str(kf), caption=kf.name, use_container_width=True)
 
+    # =========================================================================
+    # TAB 5: FIREBASE CLOUD FORENSIC VAULT & SYNC
+    # =========================================================================
+    with nav_firebase:
+        st.markdown("### ☁️ Firebase Cloud Evidence Vault & Case Sync")
+        st.markdown(
+            "Unified digital evidence management powered by **Google Firebase Spark Tier (100% Free)**. "
+            "Enables decentralized forensic collaboration, court-admissible PDF archival, and cryptographic audit ledgers."
+        )
+
+        fb_status = firebase_forensics.get_status()
+        is_live = fb_status.get("is_live", False)
+
+        # Telemetry Banner
+        t_col1, t_col2, t_col3, t_col4 = st.columns(4)
+        with t_col1:
+            st.metric(
+                label="Firebase Mode",
+                value="LIVE CLOUD" if is_live else "AIR-GAPPED VAULT",
+                delta="ONLINE" if is_live else "OFFLINE READY",
+            )
+        with t_col2:
+            st.metric(
+                label="Project ID",
+                value=fb_status.get("project_id", "feas-forensics-dev"),
+            )
+        with t_col3:
+            st.metric(
+                label="Spark Cloud Storage",
+                value="5.0 GB FREE",
+                help="Google Firebase Spark free tier perpetual capacity",
+            )
+        with t_col4:
+            st.metric(
+                label="Free Auth Quota",
+                value="50k USERS / MO",
+                help="Email/Password & Anonymous Auth free allowance",
+            )
+
+        st.markdown("---")
+
+        c_left, c_right = st.columns([1.2, 1.0])
+
+        with c_left:
+            st.markdown("#### 📁 Cloud Case Management (Firestore)")
+            cases_list = firebase_forensics.list_cases(limit=20)
+
+            # Option to register new case
+            with st.expander("➕ Register New Forensic Case", expanded=False):
+                with st.form("new_case_form"):
+                    f_cid = st.text_input("Case Number", value=f"CASE-{uuid.uuid4().hex[:6].upper()}")
+                    f_title = st.text_input("Allegation / Incident Title", value="Digital Media Integrity Examination")
+                    f_notes = st.text_area("Investigation Scope", value="Authenticity verification & chain of custody preservation.")
+                    submit_case = st.form_submit_button("Save Case to Firestore")
+                    if submit_case:
+                        created = firebase_forensics.save_case(
+                            f_cid,
+                            {
+                                "title": f_title,
+                                "investigator": investigator_name,
+                                "notes": f_notes,
+                                "status": "OPEN",
+                            },
+                        )
+                        firebase_forensics.log_audit_event(
+                            f_cid,
+                            "CASE_CREATED",
+                            {"title": f_title},
+                            user=investigator_name,
+                        )
+                        st.success(f"Case '{f_cid}' registered to Cloud Firestore!")
+                        st.rerun()
+
+            if cases_list:
+                case_opts = [f"{c.get('case_id', c.get('id', 'N/A'))} - {c.get('title', 'Untitled')}" for c in cases_list]
+                sel_case_str = st.selectbox("Select Case File", case_opts)
+                sel_cid = sel_case_str.split(" - ")[0]
+                sel_case = next((c for c in cases_list if c.get("case_id") == sel_cid or c.get("id") == sel_cid), None)
+
+                if sel_case:
+                    st.json(sel_case)
+
+                    col_s1, col_s2 = st.columns(2)
+                    with col_s1:
+                        if st.button("🔄 Sync Case & PDF Reports to Firebase Storage", key=f"sync_{sel_cid}"):
+                            with st.spinner("Syncing to Firebase..."):
+                                s_res = firebase_forensics.sync_local_case(sel_cid, sel_case)
+                                st.success("Case & artifacts synchronized successfully!")
+                                st.json(s_res)
+                    with col_s2:
+                        # Fetch audit trail
+                        if st.button("📜 Load Cloud Audit Trail", key=f"trail_{sel_cid}"):
+                            trail = firebase_forensics.get_audit_trail(sel_cid)
+                            if trail:
+                                st.dataframe(pd.DataFrame(trail), use_container_width=True)
+                            else:
+                                st.info("No audit trail entries for this case.")
+            else:
+                st.info("No cases registered yet. Create one above.")
+
+        with c_right:
+            st.markdown("#### ☁️ Direct Evidence Cloud Upload (Storage)")
+            st.caption("Upload images, CCTV clips, or PDF reports directly to Firebase Storage bucket.")
+
+            cloud_up_file = st.file_uploader(
+                "Select forensic asset",
+                type=["pdf", "jpg", "png", "mp4", "mkv", "wav", "json"],
+                key="cloud_uploader_widget",
+            )
+            target_cid = st.text_input("Target Case ID", value="CASE-GLOBAL-EVIDENCE")
+
+            if cloud_up_file and st.button("🚀 Upload to Firebase Cloud Storage"):
+                with st.spinner("Encrypting & uploading asset..."):
+                    bytes_data = cloud_up_file.read()
+                    destination = f"cases/{target_cid}/evidence/{cloud_up_file.name}"
+                    up_result = firebase_forensics.upload_bytes(
+                        data=bytes_data,
+                        destination_blob=destination,
+                        content_type=cloud_up_file.type or "application/octet-stream",
+                    )
+                    firebase_forensics.log_audit_event(
+                        case_id=target_cid,
+                        event_type="DIRECT_CLOUD_UPLOAD",
+                        details={"file": cloud_up_file.name, "bytes": len(bytes_data)},
+                        user=investigator_name,
+                    )
+                    st.success(f"Uploaded successfully to {up_result.get('storage')}!")
+                    st.markdown(f"**Destination:** `{up_result.get('destination')}`")
+                    st.markdown(f"**Size:** `{up_result.get('size_bytes')} bytes`")
+                    if up_result.get("url"):
+                        st.markdown(f"[🔗 View / Download Asset]({up_result.get('url')})")
+
 
 if __name__ == "__main__":
     main()
+
