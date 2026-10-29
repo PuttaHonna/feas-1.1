@@ -58,5 +58,5 @@ EXPOSE 8000 8501 8502
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Default command: Launches all services via cross-platform run.py
-CMD ["python", "run.py", "all"]
+# Default command: Launches FastAPI REST backend on $PORT
+CMD ["python", "run.py", "api"]

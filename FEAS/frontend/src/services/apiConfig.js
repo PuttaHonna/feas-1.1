@@ -38,3 +38,4 @@ export const getApiUrl = (endpoint = '') => {
 export const getMediaUrl = (mediaPath = '') => {
   return getApiUrl(mediaPath);
 };
+
