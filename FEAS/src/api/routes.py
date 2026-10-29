@@ -28,8 +28,6 @@ from src.db.audit import (
 )
 from src.pipeline.advanced_metadata import inspect_advanced_binary_metadata
 from src.pipeline.ingestion import process_uploaded_media
-from src.reports.batch_report import build_batch_pdf
-from src.reports.pdf_generator import build_pdf
 
 router = APIRouter(prefix="/api/v1")
 
@@ -222,6 +220,7 @@ async def analyze_evidence_batch(
         json.dump(batch_results, bf, default=str)
 
     # Pre-generate batch PDF
+    from src.reports.batch_report import build_batch_pdf
     pdf_res = build_batch_pdf(batch_results)
     batch_results["pdf_path"] = pdf_res["pdf_path"]
     batch_results["pdf_sha256"] = pdf_res["pdf_sha256"]
@@ -279,6 +278,7 @@ async def get_case_report(case_id: str) -> FileResponse:
                 "ballistics": {"caliber": "N/A", "rifling": "N/A", "manufacturer": "N/A"}
             }
         summary["audit_trail"] = get_audit_trail_sync(case_id)
+        from src.reports.pdf_generator import build_pdf
         build_pdf(summary, str(report_pdf))
 
     return FileResponse(
@@ -303,6 +303,7 @@ async def get_batch_report(batch_id: str) -> FileResponse:
         with open(batch_file, "r", encoding="utf-8") as bf:
             batch_data = json.load(bf)
         
+        from src.reports.batch_report import build_batch_pdf
         build_batch_pdf(batch_data, str(report_pdf))
 
     return FileResponse(

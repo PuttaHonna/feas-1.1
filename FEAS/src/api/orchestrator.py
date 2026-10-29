@@ -15,6 +15,13 @@ from src.db.audit import log_audit_event_sync, update_case_results_sync
 from src.pipeline.advanced_metadata import inspect_advanced_binary_metadata
 from src.pipeline.ingestion import compute_sha256_file
 
+# Pre-import torchvision to eliminate thread-level circular import on Windows/Linux
+try:
+    import torchvision
+    from torchvision.transforms import InterpolationMode
+except Exception:
+    pass
+
 # Thread pool for CPU/GPU bound model execution (2 workers to conserve RAM on cloud instances)
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
