@@ -651,7 +651,12 @@ async def analyze_cctv_endpoint(
         # Build web-accessible HTTP URLs for frontend player & artifacts
         annotated_path = Path(res.get("annotated_video_path", ""))
         annotated_url = f"/results/cctv/annotated_videos/{annotated_path.name}" if annotated_path.exists() else None
-        original_url = f"/results/cctv/originals/{raw_target_name}"
+        
+        orig_store_path = results_cctv / "evidence_store" / "originals" / f"{evidence_id}_ORIGINAL{suffix}"
+        if orig_store_path.exists():
+            original_url = f"/results/cctv/evidence_store/originals/{orig_store_path.name}"
+        else:
+            original_url = f"/results/cctv/originals/{raw_target_name}"
 
         res["annotated_video_url"] = annotated_url
         res["original_video_url"] = original_url
