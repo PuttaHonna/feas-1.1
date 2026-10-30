@@ -14,11 +14,14 @@ Strict project rule compliance:
 
 from __future__ import annotations
 from dataclasses import dataclass, field, asdict
+import logging
 from pathlib import Path
 import re
 from typing import Dict, List, Optional, Tuple
 import cv2
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 # Advisory legal notice
 VEHICLE_DISCLAIMER: str = (
