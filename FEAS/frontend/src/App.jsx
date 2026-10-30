@@ -43,8 +43,8 @@ export default function App() {
       >
         <PatternWaves
           preset="lines"
-          color="#ffffff"
-          backgroundColor="#c31010"
+          color="#1e293b"
+          backgroundColor="#000000"
           fade="top"
           interactive
           cursorSize={50}
