@@ -41,23 +41,25 @@ RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/wh
 # Step 3: Copy repository structure (respecting .dockerignore)
 COPY . /app/
 
-# Ensure all runtime evidence, storage, and report directories exist
+# Ensure all runtime evidence, storage, and report directories exist and are writable by any user UID
 RUN mkdir -p /app/data/evidence_vault \
              /app/data/working_copies \
              /app/data/artifacts \
              /app/FEAS/storage \
              /app/FEAS/reports \
              /app/FEAS/temp \
-             /app/FEAS/data
+             /app/FEAS/results \
+             /app/FEAS/data && \
+    chmod -R 777 /app
 
-EXPOSE 8000 10000
+EXPOSE 7860 8000 10000
 
 ENV PYTHONPATH=/app/FEAS
 WORKDIR /app/FEAS
 
-# Healthcheck targeting FastAPI REST health endpoint
+# Healthcheck targeting FastAPI REST health endpoint (supports Render:10000 and Hugging Face:7860)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-10000}/health || exit 1
+    CMD curl -f http://localhost:${PORT:-7860}/health || exit 1
 
 # Default command: Launches single-process FastAPI backend on $PORT with minimal RAM
-CMD ["sh", "-c", "exec python -m uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-10000} --workers 1"]
+CMD ["sh", "-c", "exec python -m uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-7860} --workers 1"]

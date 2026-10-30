@@ -43,16 +43,18 @@ app = FastAPI(
 origins = [
     "https://feas-forensics.web.app",
     "https://feas-forensics.firebaseapp.com",
+    "https://huggingface.co",
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:3000",
     "http://localhost:8000",
+    "http://localhost:7860",
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https://.*\.web\.app|https://.*\.firebaseapp\.com|http://localhost:.*",
+    allow_origin_regex=r"https://.*\.web\.app|https://.*\.firebaseapp\.com|https://.*\.hf\.space|https://.*\.huggingface\.co|http://localhost:.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

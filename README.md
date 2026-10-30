@@ -1,3 +1,13 @@
+---
+title: FEAS 2.0 AI Surveillance Forensics
+emoji: 🛡️
+colorFrom: red
+colorTo: blue
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # FEAS 2.0 & Deep Learning Forensics Investigator
 
 > **Educational & Research Forensic Video & Image Analysis Suite**
