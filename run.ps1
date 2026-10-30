@@ -10,18 +10,13 @@ param(
 $PSScriptRoot = Split-Path -Parent -Path $MyInvocation.MyCommand.Definition
 Set-Location -Path $PSScriptRoot
 
-# Auto-activate venv if available
-$venvActivate = Join-Path $PSScriptRoot ".venv\Scripts\Activate.ps1"
-if (Test-Path $venvActivate) {
-    & $venvActivate
+$pyExe = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
+if (-not (Test-Path $pyExe)) {
+    $pyExe = "python"
 }
 
-# Find python
-$pythonCmd = (Get-Command python -ErrorAction SilentlyContinue)
-if (-not $pythonCmd) {
-    Write-Error "Python was not found on your system PATH. Please install Python 3.10+ from python.org."
-    exit 1
+if (-not $ScriptArgs -or $ScriptArgs.Count -eq 0) {
+    & $pyExe run.py all
+} else {
+    & $pyExe run.py @ScriptArgs
 }
-
-$runPy = Join-Path $PSScriptRoot "run.py"
-& python $runPy $ScriptArgs
