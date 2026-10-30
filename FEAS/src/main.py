@@ -40,9 +40,19 @@ app = FastAPI(
 )
 
 # CORS Configuration
+origins = [
+    "https://feas-forensics.web.app",
+    "https://feas-forensics.firebaseapp.com",
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:3000",
+    "http://localhost:8000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
+    allow_origin_regex=r"https://.*\.web\.app|https://.*\.firebaseapp\.com|http://localhost:.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

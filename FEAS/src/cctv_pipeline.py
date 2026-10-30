@@ -517,7 +517,6 @@ def run_cctv_analysis(
 
             # Periodic progress update & memory garbage collection
             if frame_counter % 20 == 0:
-                import gc
                 gc.collect()
                 pct = min(0.75, 0.30 + (frame_counter / 200.0) * 0.45)
                 update_progress(pct, f"Processed {frame_counter} frames... (Vehicles: {len(vehicle_profiles)}, Collisions: {len(collision_detector.incidents)})")

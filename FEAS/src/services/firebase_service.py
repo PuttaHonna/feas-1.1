@@ -263,6 +263,9 @@ class FirebaseForensicService:
             "uploaded_at": datetime.now(timezone.utc).isoformat(),
         }
 
+    # Alias for forensic pipeline compatibility
+    upload_evidence_file = upload_file
+
     def process_and_archive_cctv_run(
         self,
         case_id: str,
@@ -283,7 +286,7 @@ class FirebaseForensicService:
             p_annotated = Path(annotated_video_path)
             if p_annotated.exists():
                 blob_name = f"cases/{case_id}/videos/{evidence_id}_annotated.mp4"
-                up_res = self.upload_evidence_file(p_annotated, blob_name, content_type="video/mp4")
+                up_res = self.upload_file(p_annotated, blob_name, content_type="video/mp4")
                 if up_res:
                     uploaded_artifacts["annotated_video"] = up_res
                     if auto_clean_local:
@@ -299,7 +302,7 @@ class FirebaseForensicService:
             p_kf = Path(kf)
             if p_kf.exists():
                 blob_kf = f"cases/{case_id}/keyframes/{evidence_id}_{p_kf.name}"
-                up_kf = self.upload_evidence_file(p_kf, blob_kf, content_type="image/jpeg")
+                up_kf = self.upload_file(p_kf, blob_kf, content_type="image/jpeg")
                 if up_kf:
                     kf_uploaded.append(up_kf)
         if kf_uploaded:

@@ -44,6 +44,15 @@ def create_verified_working_copy(
     # Compute original hash
     original_hash = calculate_file_sha256(orig)
 
+    # Ensure destination is writable if it already exists from a previous run
+    if working_copy_path.exists():
+        import stat
+        try:
+            working_copy_path.chmod(stat.S_IWRITE | stat.S_IREAD)
+            working_copy_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+
     # Perform binary copy
     shutil.copy2(orig, working_copy_path)
 
