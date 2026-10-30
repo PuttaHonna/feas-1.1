@@ -34,9 +34,10 @@ WORKDIR /app
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
-# Step 2: Install dependencies (leveraging pre-installed CPU torch)
+# Step 2: Install dependencies (leveraging pre-installed CPU torch) & cache YOLOv8n weights
 COPY requirements.txt /app/
-RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt && \
+    python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
 
 # Step 3: Copy repository structure (respecting .dockerignore)
 COPY . /app/

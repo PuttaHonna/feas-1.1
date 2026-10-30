@@ -112,9 +112,15 @@ class FirebaseForensicService:
                 self.auth = auth
                 self.firestore_client = firestore.client()
                 try:
-                    self.storage_bucket = storage.bucket(self.bucket_name)
+                    b = storage.bucket(self.bucket_name)
+                    if b.exists():
+                        self.storage_bucket = b
+                    else:
+                        logger.warning(f"Firebase Storage bucket '{self.bucket_name}' not active on GCP. Using local storage.")
+                        self.storage_bucket = None
                 except Exception as b_err:
-                    logger.warning(f"Storage bucket init warning: {b_err}")
+                    logger.warning(f"Storage bucket check warning: {b_err}")
+                    self.storage_bucket = None
 
                 self.is_live = True
                 self.mode = "LIVE_CLOUD"

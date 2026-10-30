@@ -144,13 +144,18 @@ class CCTVDetector:
         # Run inference with sensitive floor so subtle quadrupeds/animals are detected
         inference_thresh = min(thresh, 0.14)
 
-        results = self.model(
-            frame_bgr,
-            conf=inference_thresh,
-            imgsz=target_imgsz,
-            device=self.device,
-            verbose=False
-        )
+        # Cap inference size on CPU to conserve RAM and run 3x faster
+        if self.device == "cpu":
+            target_imgsz = min(target_imgsz, 480)
+
+        with torch.inference_mode():
+            results = self.model(
+                frame_bgr,
+                conf=inference_thresh,
+                imgsz=target_imgsz,
+                device=self.device,
+                verbose=False
+            )
 
         detections: List[Detection] = []
         if not results or len(results) == 0:

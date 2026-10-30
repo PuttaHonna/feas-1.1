@@ -579,8 +579,22 @@ async def analyze_cctv_endpoint(
     Event Extraction, and Cryptographic Evidence Hashing.
     """
     try:
-        content = await file.read()
-        import shutil
+        # Unbox Form wrappers to native Python types
+        def _unwrap(v, default):
+            if hasattr(v, "default"):
+                return v.default if v.default is not ... else default
+            return v if v is not None else default
+
+        case_id = str(_unwrap(case_id, "CASE-2026-001"))
+        evidence_id = str(_unwrap(evidence_id, "EV-CCTV-001"))
+        camera_id = str(_unwrap(camera_id, "CAM-01"))
+        camera_location = str(_unwrap(camera_location, "Main Gate"))
+        analysis_mode = str(_unwrap(analysis_mode, "fast_review"))
+        enhancement_mode = str(_unwrap(enhancement_mode, "deep_learning"))
+        confidence_threshold = float(_unwrap(confidence_threshold, 0.25))
+        yolo_model = str(_unwrap(yolo_model, "yolov8n.pt"))
+        overlay_style = str(_unwrap(overlay_style, "tactical_hud"))
+        tracking_method = str(_unwrap(tracking_method, "bytetrack"))
 
         # Configure results output directory
         results_cctv = RESULTS_DIR / "cctv"
@@ -591,8 +605,11 @@ async def analyze_cctv_endpoint(
         suffix = Path(file.filename or "cctv.mp4").suffix or ".mp4"
         raw_target_name = f"{evidence_id}_RAW{suffix}"
         raw_path = originals_dir / raw_target_name
+
+        # Stream upload chunk-by-chunk directly to disk to keep RAM minimal (<1MB)
         with open(raw_path, "wb") as f:
-            f.write(content)
+            while chunk := await file.read(512 * 1024):
+                f.write(chunk)
 
         parsed_roi = None
         if roi_polygon:
@@ -657,7 +674,7 @@ async def analyze_cctv_endpoint(
                 res["annotated_video_url"] = r2_arch["artifacts"]["annotated_video"]["url"]
                 res["storage_backend"] = "CLOUDFLARE_R2"
                 res["is_cloud_stored"] = True
-        elif firebase_forensics.is_live:
+        elif firebase_forensics.is_live and firebase_forensics.storage_bucket is not None:
             fb_arch = firebase_forensics.process_and_archive_cctv_run(
                 case_id=case_id,
                 evidence_id=evidence_id,
