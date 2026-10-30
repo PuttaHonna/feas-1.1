@@ -27,6 +27,8 @@ services:
         value: "1"
       - key: PYTHONUNBUFFERED
         value: "1"
+      - key: DISABLE_EASYOCR
+        value: "1"
       # Cloudflare R2 Zero-Egress Cloud Storage (10 GB Free Tier)
       - key: R2_ACCOUNT_ID
         sync: false

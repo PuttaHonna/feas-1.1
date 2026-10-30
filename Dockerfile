@@ -15,7 +15,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     OPENBLAS_NUM_THREADS=1 \
     VECLIB_MAXIMUM_THREADS=1 \
     NUMEXPR_NUM_THREADS=1 \
-    TORCH_NUM_THREADS=1
+    TORCH_NUM_THREADS=1 \
+    DISABLE_EASYOCR=1
 
 # Install minimal OS libraries required for OpenCV and FFmpeg video processing
 RUN apt-get update && apt-get install -y --no-install-recommends \

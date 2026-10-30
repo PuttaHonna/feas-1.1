@@ -111,7 +111,12 @@ async def icons_svg():
 @app.get("/healthz")
 @app.get("/health")
 async def healthz():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "version": "2.4.2",
+        "device": "cpu",
+        "easyocr_disabled": os.getenv("DISABLE_EASYOCR", "1") == "1",
+    }
 
 
 

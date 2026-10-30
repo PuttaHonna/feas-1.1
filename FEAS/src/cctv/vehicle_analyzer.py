@@ -43,10 +43,21 @@ _EASYOCR_INITIALIZED = False
 
 
 def _get_easyocr_reader():
-    """Lazily initialize EasyOCR reader safely without crashing if dependencies differ."""
+    """Lazily initialize EasyOCR reader safely without crashing or exceeding memory limits."""
     global _EASYOCR_READER, _EASYOCR_INITIALIZED
     if _EASYOCR_INITIALIZED:
         return _EASYOCR_READER
+
+    # In cloud environments with tight memory limits (e.g. Render Free Tier 512MB RAM),
+    # loading EasyOCR's CRAFT and ResNet models adds ~200MB and triggers Linux OOM SIGKILL.
+    # We default to skipping EasyOCR on low-RAM cloud servers and use the fast OpenCV contour engine.
+    import os
+    if os.getenv("DISABLE_EASYOCR", "1").lower() in ("1", "true", "yes"):
+        logger.info("EasyOCR disabled (DISABLE_EASYOCR=1). Using fast OpenCV contour license plate analyzer.")
+        _EASYOCR_READER = None
+        _EASYOCR_INITIALIZED = True
+        return None
+
     try:
         import easyocr
         # Disable GPU or use CPU for safe headless operation
