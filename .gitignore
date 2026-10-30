@@ -44,6 +44,15 @@ temp/
 **/temp/
 exports/
 **/exports/
+
+# Always preserve source code modules
+!FEAS/src/**
+!src/**
+
+# Re-ignore caches and weights inside src/
+**/__pycache__/
+**/*.pyc
+**/*.pt
 runs/
 *.avi
 *.mp4

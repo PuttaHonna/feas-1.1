@@ -14,7 +14,6 @@ from pydantic import BaseModel, Field
 
 from src.config import BASE_DIR, REPORTS_DIR
 from src.db.audit import get_case_sync, log_audit_event_sync
-from src.reports.pdf_generator import build_user_analysis_affidavit
 from src.services.firebase_service import firebase_forensics
 
 router = APIRouter(prefix="/api/v1/firebase", tags=["Firebase Cloud Forensics"])
@@ -262,6 +261,7 @@ async def download_user_analysis_pdf(user_id: str, analysis_id: str) -> FileResp
     profile = firebase_forensics.get_user_profile(user_id) or {"user_id": user_id}
 
     # 3. Generate PDF
+    from src.reports.pdf_generator import build_user_analysis_affidavit
     result = build_user_analysis_affidavit(record, profile)
     pdf_path = result["pdf_path"]
     filename = result["filename"]
@@ -300,6 +300,7 @@ async def generate_court_affidavit(req: AffidavitGenerateRequest) -> Dict[str, A
     profile = req.user_profile or {}
     user_id = profile.get("user_id") or record.get("user_id") or "examiner_001"
 
+    from src.reports.pdf_generator import build_user_analysis_affidavit
     result = build_user_analysis_affidavit(record, profile)
 
     cloud_url = None
