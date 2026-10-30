@@ -33,10 +33,10 @@ data/
 **/data/
 evidence_store/
 **/evidence_store/
-storage/
-**/storage/
-reports/
-**/reports/
+/storage/
+/FEAS/storage/
+/reports/
+/FEAS/reports/
 *.pdf
 results/
 **/results/
