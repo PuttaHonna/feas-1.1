@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 import logging
 from pathlib import Path
 import shutil
+import gc
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 import cv2
 import numpy as np
@@ -582,11 +583,9 @@ def run_cctv_analysis(
             )
             # Remove intermediate streamed frames to keep RAM & storage minimal
             try:
-                import shutil
                 shutil.rmtree(temp_frames_dir, ignore_errors=True)
             except Exception:
                 pass
-            import gc
             gc.collect()
 
         # Step 16: Export CSV, JSON logs, vehicle registry, and summary dossier
