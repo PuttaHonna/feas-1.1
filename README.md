@@ -1,8 +1,8 @@
 ---
-title: FEAS 2.0 AI Surveillance Forensics
+title: FEAS 2.0 Forensic Surveillance Backend
 emoji: 🛡️
-colorFrom: red
-colorTo: blue
+colorFrom: blue
+colorTo: indigo
 sdk: docker
 app_port: 7860
 pinned: false

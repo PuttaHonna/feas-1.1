@@ -41,25 +41,35 @@ RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/wh
 # Step 3: Copy repository structure (respecting .dockerignore)
 COPY . /app/
 
-# Ensure all runtime evidence, storage, and report directories exist and are writable by any user UID
+# Ensure all runtime evidence, storage, and report directories exist
 RUN mkdir -p /app/data/evidence_vault \
              /app/data/working_copies \
              /app/data/artifacts \
              /app/FEAS/storage \
              /app/FEAS/reports \
              /app/FEAS/temp \
-             /app/FEAS/results \
-             /app/FEAS/data && \
-    chmod -R 777 /app
+             /app/FEAS/data \
+             /app/FEAS/results/cctv/originals \
+             /app/FEAS/results/cctv/annotated_videos \
+             /app/FEAS/results/cctv/keyframes \
+             /app/FEAS/results/cctv/evidence_store
 
-EXPOSE 7860 8000 10000
+# Create non-root user (UID 1000) for Hugging Face Spaces compatibility
+RUN useradd -m -u 1000 user && \
+    mkdir -p /home/user && \
+    chown -R user:user /app /home/user && \
+    chmod -R 777 /app /home/user
 
-ENV PYTHONPATH=/app/FEAS
+EXPOSE 8000 10000 7860
+
+ENV PYTHONPATH=/app/FEAS \
+    HOME=/home/user
 WORKDIR /app/FEAS
+USER user
 
-# Healthcheck targeting FastAPI REST health endpoint (supports Render:10000 and Hugging Face:7860)
+# Healthcheck targeting FastAPI REST health endpoint
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:${PORT:-7860}/health || exit 1
 
-# Default command: Launches single-process FastAPI backend on $PORT with minimal RAM
+# Default command: Launches FastAPI backend on $PORT (7860 for Hugging Face, 10000 for Render)
 CMD ["sh", "-c", "exec python -m uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-7860} --workers 1"]
